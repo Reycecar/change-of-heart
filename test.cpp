@@ -12,6 +12,11 @@
 #include <iphlpapi.h>
 #include <string.h>
 #include <rpc.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Wininet.lib")
 #pragma comment(lib, "IPHLPAPI.lib")
@@ -74,6 +79,8 @@ char** dec_uuids(char** data, int elements) {
 	printf("%s\n", data[1]);
 	return data;
 }
+
+
 /*
 int decode(char** data, int elements) {
 
