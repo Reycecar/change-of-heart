@@ -10,6 +10,8 @@
 #define DEFAULT_BUFFER_LEN 40000
 using namespace std;
 
+
+
 char** dec_uuids(char** data, int elements) {
 	char* key = data[0];
 	printf("key: %s\n", key);
@@ -29,18 +31,15 @@ char** dec_uuids(char** data, int elements) {
 			int strHexVal;
 			char hexStr[3];
 			if (currStr[j] != '-' && currStr[j+1] != '-'){
-				
 				sprintf(hexStr, "%c%c", currStr[j], currStr[j+1]);
-				printf("str: %s", hexStr);
 				sscanf(hexStr, "%x", &strHexVal);
-				
+				//printf("str: %s", hexStr);
 				sprintf(hexStr, "%c%c", key[j], key[j+1]);
-				printf(" | key: %s", hexStr);
+				//printf(" | key: %s", hexStr);
 				sscanf(hexStr, "%x", &keyHexVal);
-				
 				//printf("str: %c ^ %c =\n", curStr[j], key[j]);
 				int dec = strHexVal ^ keyHexVal;
-				printf(" | xord: %x\n", dec);
+				//printf(" | xord: %x\n", dec);
 				if (dec < 16){
 					sprintf(hexStr, "0%x", dec);
 				} else {
@@ -48,16 +47,18 @@ char** dec_uuids(char** data, int elements) {
 				}
 				//sprintf(hexStr, "%x", dec);
 				strncat(temp, hexStr, 2);
-				//strcat(temp, hexStr);
 			} else {
 				j -= 1;
 				strcat(temp, "-");
 			}
 		}
 		data[i] = temp;
+		printf("%d", i);
 		printf("uuid value (decrypted): %s\n", data[i]);
 	}
-	return 0;
+	printf("%s\n", data[0]);
+	printf("%s\n", data[1]);
+	return data;
 }
 /*
 int decode(char** data, int elements) {
@@ -122,10 +123,15 @@ int main() {
 
     int data_elements = sizeof(data) / sizeof(data[0]);
     printf("[main] data's elements: %d\n", data_elements);
-    dec_uuids(data, data_elements);
+    char** new_data = dec_uuids(data, data_elements);
 
+	printf("%s\n", new_data[0]);
+	printf("%s\n", new_data[1]);
+
+	
 	//int uuids_elements = sizeof(uuids) / sizeof(uuids[0]);
     //printf("[main] uuids's elements: %d\n", uuids_elements);
 	//dec_uuids(uuids, uuids_elements);
 	//printf("callcode (decrypted): %s\n", *(data + 1));
+	return 0;
 }
