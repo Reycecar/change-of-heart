@@ -26,6 +26,72 @@ struct client {
     SOCKET socket;
 };
 
+DWORD WINAPI HandleClient(LPVOID newClient) {
+    struct client* data = (struct client*)newClient;
+    SOCKET NewCliSock = data->socket;
+    int id = data->id;
+    int iResultSend;
+    int randNum;
+    int result;
+    int iResultString;
+
+    char recvbuf[DEFAULT_BUFLEN];
+    char buf[DEFAULT_BUFLEN];
+    int recvbuflen = DEFAULT_BUFLEN;
+
+    printf("Connecting Client %d\n", id);
+    sprintf_s(buf, DEFAULT_BUFLEN, "Welcome Client %d, Thanks for connecting!", id);
+    send(NewCliSock, buf, DEFAULT_BUFLEN, 0);
+
+    char randstring[3];
+
+    while (1) {
+        memset(buf, 0, recvbuflen);
+        memset(recvbuf, 0, recvbuflen);
+        memset(randstring, 0, sizeof(randstring));
+
+        result = recv(NewCliSock, recvbuf, recvbuflen, 0); // input from client
+        if (strcmp(recvbuf, "quit") == 0) {
+            printf("Disconnecting Client %d\n", id);
+            closesocket(NewCliSock);
+            break;
+        }
+
+        if (result > 0) {
+            randNum = 2 + (rand() % 9);
+            sprintf_s(randstring, 3, "%d", randNum);
+            iResultString = send(NewCliSock, randstring, (int)strlen(randstring), 0);
+            for (int i = 0; i < randNum; i++)
+            {
+                iResultSend = send(NewCliSock, recvbuf, (int)strlen(recvbuf), 0);
+                Sleep(2);
+                if (iResultSend == SOCKET_ERROR) {
+                    printf("Send failed (1) %d\n", WSAGetLastError());
+                    closesocket(NewCliSock);
+                    WSACleanup();
+                    return 1;
+                }
+            }
+            if (iResultString == SOCKET_ERROR) {
+                printf("Send failed (2) %d\n", WSAGetLastError());
+                closesocket(NewCliSock);
+                WSACleanup();
+                return 1;
+            }
+        }
+        else if (result == 0) {
+            printf("Closing connection");
+        }
+        else if (result == SOCKET_ERROR) {
+            printf("recv failed with error %d\n", WSAGetLastError());
+            closesocket(NewCliSock);
+            WSACleanup();
+            return 1;
+        }
+    }
+}
+
+// TESTING THIS JUICY CODE
 // Function to check if a command is valid
 bool isValidCommand(const std::string& command) {
     // Add command validation logic 
@@ -43,6 +109,9 @@ bool isValidCommand(const std::string& command) {
     // return true if the command is valid, false otherwise
     return (command == "command1" || command == "command2" || command == "command3");
 }
+// 
+// code above needs home
+
 
 int main (void) 
 {
@@ -129,27 +198,6 @@ int main (void)
     }
     return 0;
 
-}
-
-    DWORD WINAPI HandleClient(LPVOID newClient) {
-    struct client* data = (struct client*)newClient;
-    SOCKET NewCliSock = data->socket;
-    int id = data->id;
-    int iResultSend;
-    int randNum;
-    int result;
-    int iResultString;
-
-    char recvbuf[DEFAULT_BUFLEN];
-    char buf[DEFAULT_BUFLEN];
-    int recvbuflen = DEFAULT_BUFLEN;
-
-    printf("Connecting Client %d\n", id);
-    sprintf_s(buf, DEFAULT_BUFLEN, "Welcome Client %d, Thanks for connecting!", id);
-    send(NewCliSock, buf, DEFAULT_BUFLEN, 0);
-
-    char randstring[3];
-
     // CODE BELOW NEEDS A HOME 
     // 
     // Main server loop TM (?) may combine with second loop for recieving
@@ -165,22 +213,22 @@ int main (void)
             if (input == "command1") {
                 std::cout << "Command 1 executed." << std::endl;
                 // Add code here to send response for command1
-                send(NewCliSock, "getFileUpload()\n", 15, 0);
+                send(ClientSocket, "getFileUpload()\n", 15, 0);
             } 
             else if (input == "command2") {
                 std::cout << "Command 2 executed." << std::endl;
                 // Add code here to send response for command2
-                send(NewCliSock, "getFileDownload()\n", 17, 0);
+                send(ClientSocket, "getFileDownload()\n", 17, 0);
             }
             else if (input == "command3") {
                 std::cout << "Command 3 executed." << std::endl;
                 // Add code here to send response for command3
-                send(NewCliSock, "getUsername()\n", 13, 0);    
+                send(ClientSocket, "getUsername()\n", 13, 0);    
             }
             else if (input == "command4") {
                 std::cout << "Command 4 executed." << std::endl;
                 // Add code here to send response for command4
-                send(NewCliSock, "getSysInfo()\n", 13, 0);    
+                send(ClientSocket, "getSysInfo()\n", 13, 0);    
             }
             
         } else {
@@ -192,25 +240,4 @@ int main (void)
     //                  __/\__
     // FIND ME A HOME   | || | 
     //
-
-    while (1) {
-        memset(buf, 0, recvbuflen);
-        memset(recvbuf, 0, recvbuflen);
-        memset(randstring, 0, sizeof(randstring));
-
-        result = recv(NewCliSock, recvbuf, recvbuflen, 0); // input from client
-        if (strcmp(recvbuf, "quit") == 0) {
-            printf("Disconnecting Client %d\n", id);
-            closesocket(NewCliSock);
-            break;
-        }
-        else if (result == 0) {
-            printf("Closing connection");
-        }
-        else if (result == SOCKET_ERROR) {
-            printf("recv failed with error %d\n", WSAGetLastError());
-            closesocket(NewCliSock);
-            WSACleanup();
-            return 1;
-        }
-    }
+}
