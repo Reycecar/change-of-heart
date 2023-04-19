@@ -29,9 +29,7 @@ def xor(message):
 
 while True:
     conn, addr = sock.accept()
-    print ('Connected by ' + str(addr))
-  #  rec = conn.recv(15);
-  #  print (xorE(rec));
+    print ('Connection from ' + str(addr))
 
     while True:
         userInput = input(">> ")
@@ -88,7 +86,7 @@ while True:
 
                 fileuserInput = xor(fileuserInput)
                 print(fileuserInput)
-                ## This will probably break at some point, not ideal solution
+                # This will probably break at some point, not ideal solution
                 if "99999EOF99999" in fileuserInput:
                     temp = fileuserInput.split("99999EOF99999")
                     if "xxxxx" in temp[0]:

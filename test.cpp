@@ -29,8 +29,6 @@
 #define DEFAULT_BUFFER_LEN 40000
 using namespace std;
 
-
-
 char** dec_uuids(char** data, int elements) {
 	char* key = data[0];
 	printf("key: %s\n", key);
@@ -39,9 +37,9 @@ char** dec_uuids(char** data, int elements) {
 	for (int i = 0; i < elements; i++) {
 		printf("[*] Allocating %d of %d\n", i + 1, elements);
 		printf("%s\n", data[i]);
-  	}
+	}
 
-  	for (int i = 1; i < elements; i++) {
+	for (int i = 1; i < elements; i++) {
 		char* currStr = data[i];
 		char temp[37] = "";
 		printf("uuid value (encrypted): %s\n", currStr);
