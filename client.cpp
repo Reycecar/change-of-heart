@@ -112,7 +112,7 @@ std::string get_response_string(HANDLE hReq) {
 
 // Function for getting the public facing IP address.
 std::string getPublicIP() {
-	HANDLE hInt = InternetOpen(L"Mozilla/5.0",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL, 0);
+	HANDLE hInt = InternetOpenW(L"Mozilla/5.0",INTERNET_OPEN_TYPE_PRECONFIG,NULL,NULL, 0);
 	// Create hConnect handle for ifconfig.me
 	HANDLE hConn = InternetConnectA(hInt, "ifconfig.me", 80, NULL, NULL, INTERNET_SERVICE_HTTP, NULL, NULL);
 	// Pass hConnect handle into HttpOpenRequestA with request to ifconfig.me/ip
