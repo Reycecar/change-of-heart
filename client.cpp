@@ -443,7 +443,8 @@ int main(int argc, char const* argv[]) {
 			case 1:
 				printf("Download"); // debug
 				// get filepath from server
-				int bytes_received = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);				if (bytes_received < 0) {
+				int bytes_received = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);				
+				if (bytes_received < 0) {
 					printf("Failed to receive filepath"); // debug
 				}
 				filepath = recvbuf;
