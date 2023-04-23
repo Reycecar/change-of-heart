@@ -137,11 +137,13 @@ while True:
             userInput = xor(userInput)
             conn.sendall(userInput)
             recv = conn.recv(1024)
-            msg = xor(recv)
-            while "gettfouttahereistfg" not in message: # continue receiving and decrypting messages until a specific marker is hit
-                print(message)
-                rec = conn.recv(1024)
-                message = xor(rec.decode())
+            print(recv.decode())
+            msg = xor(recv.decode())
+            print(msg)
+            while "gettfouttahereistfg" not in msg.decode(): # continue receiving and decrypting messages until a specific marker is hit
+                print(msg)
+                recv = conn.recv(1024)
+                msg = xor(recv)
         elif "help" in userInput.lower():
             print(options)
             
