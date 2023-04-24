@@ -196,9 +196,7 @@ std::string GetProcessList()
 
 // get the windows os version
 std::string getWinVer() {
-	return std::string("Windows 10");
-	// Deprecated
-	/*
+	// Deprecated but it still works lol
 	OSVERSIONINFOEX osvi;
 	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
@@ -261,7 +259,6 @@ std::string getWinVer() {
 		oss << " (Build " << buildNumber << ")";
 	}
 	return oss.str();
-	*/
 }
 
 //use previous functions in information string.

