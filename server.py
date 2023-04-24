@@ -36,6 +36,7 @@ def receiveMsg(conn):
     # turn message length into hex (message may be padded with 'P') 
     msgLen = int(msg, 16)  # turn msgLen into hex int
     print(f"message length (base 10): {msgLen}")
+    print("message decoded:\n")
     
     
     while msgLen > 0: # when message length is less than 0, stop recieving
@@ -46,7 +47,7 @@ def receiveMsg(conn):
             recv = conn.recv(1024).decode()  # receive 1024 bytes
             msg = xor(recv)  # xor decode 1024 bytes
             
-        print(f"message decoded:\n\n{msg.decode()}")
+        print(f"{msg.decode()}", end="")
         msgLen = msgLen - 1024  # decrement message length
         
 def main():
