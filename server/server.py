@@ -41,18 +41,6 @@ systeminfo
 
 OPTIONS = ["upload", "download", "systeminfo", "processes", "help", "end"] #available commands
 
-'''
-def xor(msg):
-    xor_key = ord('+') # XOR key as ASCII value of '+'
-    msg_len = len(msg)
-    xor_msg = '' # init empty string
-    for i in range(msg_len):
-        if msg[i] != '\0' and msg[i] != chr(xor_key):
-            xor_msg += chr(ord(msg[i]) ^ xor_key) # XOR each character with the XOR key, excluding special characters
-        else:
-            xor_msg += msg[i] # Add character as is if it's a special character
-    return str.encode(xor_msg) # return XOR'd character string in bytes'''
-
 def xor(msg):
     newMsg = "" 
     for char in msg:
