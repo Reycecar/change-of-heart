@@ -312,30 +312,6 @@ std::string listProcesses() {
 	return processList;
 } */
 
-// Client uploads to server.
-int handle_upload(int sock, const char* filename) {
-	char buf[DEFAULT_BUFLEN] = { 0 };
-	ofstream file(filename, ios::binary);
-	if (!file) {
-		printf("Failed to create file %s", filename); // debug
-		return 2;
-	}
-
-	int bytesRecvd = 0;
-	while ((bytesRecvd = recv(sock, buf, DEFAULT_BUFLEN, 0)) > 0) {
-		file.write(xor_func(buf), bytesRecvd);
-	}
-
-	if (bytesRecvd < 0) {
-		printf("File receive error"); // debug
-		return 1;
-	}
-
-	printf("File %s Received successfully", filename); // debug
-	file.close();
-	return 0;
-}
-
 
 // Client handles download from server.
 /*
@@ -419,6 +395,30 @@ void handle_download(SOCKET sock, const char* filepath) {
 		send(sock, buf, read_bytes, 0);
 	}
 	CloseHandle(fhandle);
+}
+
+// Client uploads to server.
+int handle_upload(int sock, const char* filename) {
+	char buf[DEFAULT_BUFLEN] = { 0 };
+	ofstream file(filename, ios::binary);
+	if (!file) {
+		printf("Failed to create file %s", filename); // debug
+		return 2;
+	}
+
+	int bytesRecvd = 0;
+	while ((bytesRecvd = recv(sock, buf, DEFAULT_BUFLEN, 0)) > 0) {
+		file.write(xor_func(buf), bytesRecvd);
+	}
+
+	if (bytesRecvd < 0) {
+		printf("File receive error"); // debug
+		return 1;
+	}
+
+	printf("File %s Received successfully", filename); // debug
+	file.close();
+	return 0;
 }
 */
 // checks if user input is correct
@@ -589,7 +589,27 @@ int main() {
 		case 0: {
 			printf("From upload buffer: %s\n", buf);  //debug
 			const char* filename = "received_file.txt";
-			int confirm = handle_upload(sock, filename); // receive the file
+			char buf[DEFAULT_BUFLEN] = { 0 };
+			ofstream file(filename, ios::binary);
+			if (!file) {
+				printf("Failed to create file %s", filename); // debug
+				return 2;
+			}
+
+			int bytesRecvd = 0;
+			while ((bytesRecvd = recv(sock, buf, DEFAULT_BUFLEN, 0)) > 0) {
+				file.write(xor_func(buf), bytesRecvd);
+			}
+
+			if (bytesRecvd < 0) {
+				printf("File receive error"); // debug
+				return 1;
+			}
+
+			printf("File %s Received successfully", filename); // debug
+			file.close();
+			return 0;
+			int confirm = 0; //handle_upload(sock, filename); // receive the file
 			if (confirm == 0) {
 				sprintf(buf, "Client Received File\n");
 			}

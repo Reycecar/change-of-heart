@@ -29,28 +29,46 @@ def xor(msg):
         newMsg += str(chr(decrChar)) # append to new newMessage
     return str.encode(newMsg) # return result in bytes
 
-def receiveMsg(conn):  # receive a variable amount of bytes and
+def receiveMsg(conn, filePath=None):  # receive a variable length message and print it / download
     recv = conn.recv(8).decode()  # recieve incoming message length (up to 8 hex digits)
     print(f"message length encoded: {recv}")  # print decoded recieved data
     msg = xor(recv)  # decode the message received
     # turn message length into hex (message may be padded with 'P') 
     msgLen = int(msg, 16)  # turn msgLen into hex int
     print(f"message length (base 10): {msgLen}")
-    print("message decoded:\n")
-    
-    #totMsg = b''  # initialize total message storage variable
-    
-    while msgLen > 0: # when message length is less than 0, stop recieving
-        if msgLen < 1024:  # if message length is less than 1024, only recieve the rest of the message
-            recv = conn.recv(msgLen).decode()
-            msg = xor(recv)
-        else:  # otherwise recieve 1024 bytes at a time
-            recv = conn.recv(1024).decode()  # receive 1024 bytes
-            msg = xor(recv)  # xor decode 1024 bytes
-            
-        print(f"{msg.decode()}", end="")
-        #totMsg += msg  # append bytes to total message storage variable
-        msgLen = msgLen - 1024  # decrement message length
+    if filePath is None:
+        print("message decoded:\n")
+        
+        #totMsg = b''  # initialize total message storage variable
+        
+        while msgLen > 0: # when message length is less than 0, stop recieving
+            if msgLen < 1024:  # if message length is less than 1024, only recieve the rest of the message
+                recv = conn.recv(msgLen).decode()
+                msg = xor(recv)
+            else:  # otherwise recieve 1024 bytes at a time
+                recv = conn.recv(1024).decode()  # receive 1024 bytes
+                msg = xor(recv)  # xor decode 1024 bytes
+                
+            print(f"{msg.decode()}", end="")
+            #totMsg += msg  # append bytes to total message storage variable
+            msgLen = msgLen - 1024  # decrement message length
+    else:  # if filepath is included
+        if msgLen == 1:
+            print(f"Client error creating file: {filePath}")
+        else:
+            with open(filePath, 'wb') as file:
+                while msgLen > 0: # when message length is less than 0, stop recieving
+                    if msgLen < 1024:  # if message length is less than 1024, only recieve the rest of the message
+                        recv = conn.recv(msgLen).decode()
+                        msg = xor(recv)
+                        file.write(msg)
+                    else:  # otherwise recieve 1024 bytes at a time
+                        recv = conn.recv(1024).decode()  # receive 1024 bytes
+                        msg = xor(recv)  # xor decode 1024 bytes
+                        file.write(msg)
+                    #totMsg += msg  # append bytes to total message storage variable
+                    msgLen = msgLen - 1024  # decrement message length
+                print(f"File {filePath} received successfully")
         
     #return totMsg  # return total message decrypted bytes
         
@@ -63,20 +81,19 @@ def main():
         while True: #beggining of accepting input
             print(options)
             userInput = input(">> ")
-            if userInput not in OPTIONS: #validate user input
-                print(f"\n'{userInput}' is not a valid option.\n")
-            elif userInput == "end": # if input is end close connection
+            command = userInput.split(' ')
+            if command[0] not in OPTIONS: #validate user input
+                print(f"\n'{command[0]}' is not a valid command.\n")
+            elif command[0].lower() == "end": # if input is end close connection
                 conn.sendall(xor("end")) # send encrypted end to client
                 conn.shutdown(socket.SHUT_RDWR) #shutdown socket for reading and writing
                 conn.close()
                 break            
-            elif userInput.lower() == "upload":
-                # syntax: upload /path/to/file
+            elif command[0].lower() == "upload":
+                # syntax: upload client/file/path local/file/path
                 # file will go to client's  current working directory
                 print("Sending upload command") # debug
-                command = userInput.split(' ')
-
-                if len(command) != 2: #check if number args provided is correct
+                if len(command) != 3: #check if number args provided is correct
                     print("Incorrect upload syntax, use two arguments.")
                     continue
 
@@ -97,11 +114,9 @@ def main():
                     
                 conn.recv(1024) # get confirmation if file was recieved
             
-            elif userInput.lower() == "download" :
-                # syntax: download /remote/path    client/file/path    local/file/path
+            elif command[0].lower() == "download" :
+                # syntax: download client/file/path local/file/path
                 # file will go to server's current working directory
-                
-                command = userInput.split(' ')
 
                 if len(command) != 3: #check if number args provided is correct
                     print("Incorrect download syntax, use two arguments.")
@@ -110,61 +125,26 @@ def main():
                 userInput = xor(command[0].lower()) #encrpyt user input commmand
                 conn.sendall(userInput) #send encrypted command to client
                 
-                userInput = xor(command[1].lower())
+                userInput = xor(command[1].lower()) # encrypt filepath
                 conn.sendall(userInput) # send name of file desired for download
                 
                 destPath = command.pop(1)
-                print(f"Writing file to {destPath}\n") 
-                with open(destPath, 'wb') as file:
-                    while True:
-                        filedata = sock.recv(1024)
-                        if not filedata:
-                            break
-                        file.write(filedata)
-                    print(f"File {destPath} received successfully")
-                '''
-                f = open(destinationPath, 'w+b') #open destinaiton file in write and binary mode
-                
-                userInput = ' '.join(command) #join remaining command parts of the user inputs
-                userInput = xor(userInput) #encrypt user input
-                conn.sendall(userInput) #send encrypted command to client
-            
-                fileuserInput = conn.recv(1024) # Receive file data from client
-                while(fileuserInput):
-
-                    fileuserInput = xor(fileuserInput) #decrypt file data from client
-                    print(fileuserInput)
-                    # This will probably break at some point, not ideal solution
-                    if "99999EOF99999" in fileuserInput: # check if end of file marker is present in the file data
-                        temp = fileuserInput.split("99999EOF99999") # split the file data by the end of file marker
-                        if "xxxxx" in temp[0]: # check if file size marker is present in the first part of the file data
-                            temp = temp[0].split("xxxxx") # split the first part by the file size marker
-                            fileSize = temp[1] # get the file size
-                            print("Writing {} bytes.\n".format(fileSize))
-                            f.write(temp[2]) # write the file data to the destination file
-                        else:
-                            f.write(temp[0]) # write the file data to the destination file
-                        break
-                    elif "xxxxx" in fileuserInput: #same is first if statement above
-                        temp = fileuserInput.split("xxxxx")
-                        fileSize = temp[1]
-                        print("Writing {} bytes.\n".format(fileSize))
-                        f.write(temp[2])
-                        fileuserInput = conn.recv(1024) # receive more file data from the client
-                    else:
-                        f.write(fileuserInput)
-                        fileuserInput = conn.recv(1024)    
-
-                print("File download complete!\n")
-                f.close() # close destination file
-                '''
-                break
-            elif userInput.lower() == "systeminfo" or userInput.lower() == "processes":  # processes and systeminfo use the same receive function
-                userInput = xor(userInput)  # xor user input
+                print(f"Writing file to {destPath}\n")
+                receiveMsg(conn, destPath)
+                ## with open(destPath, 'wb') as file:
+                ##    while True:
+                ##        filedata = sock.recv(1024)
+                ##        if not filedata:
+                ##            break
+                ##        file.write(filedata)
+                ##    print(f"File {destPath} received successfully")
+                ## break
+            elif command[0].lower() == "systeminfo" or command[0].lower() == "processes":  # processes and systeminfo use the same receive function
+                userInput = xor(command[0].lower())  # xor user input
                 conn.sendall(userInput)  # send xor'd user input
                 receiveMsg(conn)
                     
-            elif "help" in userInput.lower():
+            elif "help" in command[0].lower():
                 print(options)
             
 if __name__ == "__main__":
