@@ -347,7 +347,7 @@ SOCKET getConnected() {
 		// Connect to server.
 		connResult = connect(sock, ptr->ai_addr, (int)ptr->ai_addrlen);
 		if (connResult == SOCKET_ERROR) {
-			printf("Connection failed with error: %d\n", WSAGetLastError()); // debug
+			//printf("Connection failed with error: %d\n", WSAGetLastError()); // debug
 			closesocket(sock);
 			sock = INVALID_SOCKET;
 			continue;
