@@ -447,7 +447,7 @@ int main() {
 
 			// get length of data to come
 			memset(recvbuf, 0, DEFAULT_BUFLEN);
-			int br = recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
+			recv(sock, recvbuf, DEFAULT_BUFLEN, 0);
 			char* lenCStr = xor_func(recvbuf);
 			printf("lenStr: %s\n", lenCStr); // debug
 			std::string lenStr(lenCStr, strlen(lenCStr));

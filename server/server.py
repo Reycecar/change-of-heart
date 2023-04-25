@@ -52,10 +52,10 @@ def xor(msg):
     return str.encode(newMsg) # return result in bytes
 
 def receiveMsg(conn, filename=None):  # receive a variable length message and print it, if given 
-    recv = conn.recv(8).decode()  # recieve incoming message length (up to 8 hex digits)
+    recv = conn.recv(8).decode()  # recieve incoming message length (up to 8 hex digits) max value = 0xFFFFFFFF up to 4,294,967,295 bytes (~4gb)
     print(f"message length encoded: {recv}")  # print decoded recieved data
     msg = xor(recv)  # decode the message received
-    # turn message length into hex (message may be padded with 'P') 
+    # turn message length into hex 
     msgLen = int(msg, 16)  # turn msgLen into hex int
     print(f"message length (base 10): {msgLen}")
     if filename is None:
@@ -150,7 +150,7 @@ def main():
                 userInput = xor(command[1]) # encrypt filepath
                 conn.sendall(userInput) # send xor'd filepath
                 
-                destPath = command.pop(1)
+                destPath = command.pop()
                 print(f"Writing file to {destPath}\n")
                 receiveMsg(conn, destPath)
                 
@@ -159,7 +159,7 @@ def main():
                 conn.sendall(userInput)  # send xor'd command
                 if len(command) == 2:
                     print(f"Writing {command[0].lower()} to {command[1]}\n")
-                    destPath = command.pop(1)
+                    destPath = command.pop()
                     receiveMsg(conn, destPath)
                 else:
                     receiveMsg(conn)
